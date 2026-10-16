@@ -58,7 +58,7 @@
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | service_role / secret 키. **절대 `NEXT_PUBLIC_` 접두어 금지** |
 | `APP_SECRET` | ✅ | 부모 모드 쿠키 서명용 32자 이상 랜덤값 (`openssl rand -base64 32`) |
 | `GEMINI_API_KEY` | 권장 | 교재 사진 단어 인식(Gemini, **무료 등급 사용 가능**, [Google AI Studio](https://aistudio.google.com/apikey)에서 발급). 설정 시 최우선 사용 |
-| `GEMINI_MODEL` | 선택 | 기본 `gemini-3.8-flash` |
+| `GEMINI_MODEL` | 선택 | 기본 `gemini-3.5-flash-lite` (못 찾으면 다른 Flash 모델로 자동 재시도) |
 | `ANTHROPIC_API_KEY` | 선택 | Gemini 키가 없을 때 Claude Vision 사용. 둘 다 없으면 브라우저 OCR(사전형 교재는 인식 불가) |
 | `GOOGLE_TTS_API_KEY` | 선택 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 비공식 Google Translate TTS 사용 |
 
