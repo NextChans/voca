@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { parseWordList } from '@/lib/domain/wordParse';
+import { CameraCapture, canUseCamera } from './CameraCapture';
 import { blobToBase64, downsizeImage } from './image';
 
 type Words = { term: string; meaning: string }[];
@@ -53,6 +54,12 @@ export function PhotoPanel({ aiOcr, onParsed }: { aiOcr: boolean; onParsed: (wor
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  const openCamera = () => {
+    if (canUseCamera()) setCameraOpen(true);
+    else cameraRef.current?.click(); // 카메라 API 미지원 → 기기 기본 촬영/파일 선택
+  };
 
   useEffect(() => {
     return () => {
@@ -115,7 +122,7 @@ export function PhotoPanel({ aiOcr, onParsed }: { aiOcr: boolean; onParsed: (wor
           type="button"
           className="btn-primary h-14 text-base"
           disabled={busy}
-          onClick={() => cameraRef.current?.click()}
+          onClick={openCamera}
         >
           📷 사진 찍기
         </button>
@@ -143,6 +150,21 @@ export function PhotoPanel({ aiOcr, onParsed }: { aiOcr: boolean; onParsed: (wor
         className="hidden"
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
+
+      {cameraOpen && (
+        <CameraCapture
+          onCapture={(file) => {
+            setCameraOpen(false);
+            void handleFile(file);
+          }}
+          onCancel={() => setCameraOpen(false)}
+          onUnavailable={(reason) => {
+            setCameraOpen(false);
+            setResult({ ok: false, text: reason });
+            galleryRef.current?.click();
+          }}
+        />
+      )}
 
       {(preview || busy) && (
         <div className="flex items-center gap-3 rounded-xl bg-slate-100 p-3">

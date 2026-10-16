@@ -1,15 +1,13 @@
 import Link from 'next/link';
-import { ParentLockNotice } from '@/components/ParentLockNotice';
 import { requireLearner } from '@/lib/server/context';
 import { serverEnv } from '@/lib/server/env';
-import { isParentMode } from '@/lib/server/parent';
 import { WordEntry } from './_components/WordEntry';
 
 export const metadata = { title: '단어 등록' };
 
 export default async function NewWordsPage() {
-  const { user, member, learner } = await requireLearner();
-  const parentMode = await isParentMode(user.id, member.family_id);
+  // 단어 추가는 자녀 모드에서도 가능 (수정·삭제는 단어장 화면에서 부모 모드로)
+  const { learner } = await requireLearner();
 
   return (
     <div className="space-y-5">
@@ -22,11 +20,7 @@ export default async function NewWordsPage() {
         </h1>
       </div>
 
-      {parentMode ? (
-        <WordEntry aiOcr={Boolean(serverEnv.anthropicApiKey())} learnerName={learner.name} />
-      ) : (
-        <ParentLockNotice next="/words/new" what="단어 등록" />
-      )}
+      <WordEntry aiOcr={Boolean(serverEnv.anthropicApiKey())} learnerName={learner.name} />
     </div>
   );
 }

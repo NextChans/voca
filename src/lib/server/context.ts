@@ -30,10 +30,18 @@ export const getSelectedLearner = cache(async (familyId: string): Promise<repo.L
   return repo.getLearner(familyId, id);
 });
 
+/** 현재 학습자: 자녀 계정이면 본인 프로필에 고정, 부모 계정이면 기기에서 선택한 프로필 */
+export async function getCurrentLearner(member: repo.Membership): Promise<repo.Learner | null> {
+  if (member.role === 'child') {
+    return member.learner_id ? repo.getLearner(member.family_id, member.learner_id) : null;
+  }
+  return getSelectedLearner(member.family_id);
+}
+
 export async function requireLearner(): Promise<LearnerContext> {
   const ctx = await requireMember();
-  const learner = await getSelectedLearner(ctx.member.family_id);
-  if (!learner) redirect('/profiles');
+  const learner = await getCurrentLearner(ctx.member);
+  if (!learner) redirect(ctx.member.role === 'child' ? '/login' : '/profiles');
   return { ...ctx, learner };
 }
 
