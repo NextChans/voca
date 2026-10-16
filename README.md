@@ -6,7 +6,7 @@
 - **Frontend/BFF**: Next.js 16 (App Router, Server Components, Server Actions), TypeScript strict, Tailwind v4
 - **DB/Auth**: Supabase (Postgres + Auth)
 - **배포**: Vercel
-- **사진 인식**: Claude Vision (`ANTHROPIC_API_KEY` 설정 시), 미설정 시 브라우저 내 Tesseract OCR
+- **사진 인식**: Gemini(`GEMINI_API_KEY`, 무료 등급 가능) → Claude(`ANTHROPIC_API_KEY`) → 브라우저 내 Tesseract OCR 순으로 사용
 - **발음**: 기기 내장 음성(Web Speech API) + 서버 TTS(`/api/tts`, 시험 철자 문항)
 
 ---
@@ -57,7 +57,9 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | anon / publishable 키 |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | service_role / secret 키. **절대 `NEXT_PUBLIC_` 접두어 금지** |
 | `APP_SECRET` | ✅ | 부모 모드 쿠키 서명용 32자 이상 랜덤값 (`openssl rand -base64 32`) |
-| `ANTHROPIC_API_KEY` | 선택 | 사진 단어 인식 품질 향상(Claude Vision). 없으면 브라우저 OCR 사용 |
+| `GEMINI_API_KEY` | 권장 | 교재 사진 단어 인식(Gemini, **무료 등급 사용 가능**, [Google AI Studio](https://aistudio.google.com/apikey)에서 발급). 설정 시 최우선 사용 |
+| `GEMINI_MODEL` | 선택 | 기본 `gemini-3.8-flash` |
+| `ANTHROPIC_API_KEY` | 선택 | Gemini 키가 없을 때 Claude Vision 사용. 둘 다 없으면 브라우저 OCR(사전형 교재는 인식 불가) |
 | `GOOGLE_TTS_API_KEY` | 선택 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 비공식 Google Translate TTS 사용 |
 
 3. Deploy합니다.
@@ -99,7 +101,7 @@ src/proxy.ts           세션 갱신 + 비로그인 리다이렉트 (Next 16의 
 src/app/actions.ts     Server Actions (입력 검증 → 인가 → repo)
 src/app/(app)/         로그인 후 화면 (홈, 단어, 시험, 기록, 설정, 프로필)
 src/app/api/tts        발음 합성 (문항 id 기반)
-src/app/api/ocr        사진 → 단어 목록 (Claude Vision)
+src/app/api/ocr        사진 → 단어 목록 (src/lib/server/ocr: Gemini / Claude)
 src/lib/domain/        순수 도메인 로직 (채점, 주차, 파싱, PIN/토큰)
 src/lib/server/        서버 전용 (인증 컨텍스트, 부모 모드, repo)
 tests/                 vitest

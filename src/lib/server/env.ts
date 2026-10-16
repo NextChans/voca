@@ -14,5 +14,7 @@ export const serverEnv = {
     return v;
   },
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY || null,
+  geminiApiKey: () => process.env.GEMINI_API_KEY || null,
+  geminiModel: () => process.env.GEMINI_MODEL || null,
   googleTtsApiKey: () => process.env.GOOGLE_TTS_API_KEY || null,
 };
