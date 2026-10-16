@@ -1,5 +1,6 @@
 'use client';
 
+import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
 import { useMemo, useRef, useState } from 'react';
 import { SpeakButton } from '@/components/SpeakButton';
 import { gradeMeaning, gradeSpelling } from '@/lib/domain/grading';
@@ -266,11 +267,10 @@ function Session({
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               disabled={!!feedback}
-              lang={mode === 'spelling' ? 'en' : 'ko'}
               autoComplete="off"
               autoCorrect="off"
-              autoCapitalize="off"
               spellCheck={false}
+              {...(mode === 'spelling' ? englishInputProps : koreanInputProps)}
               placeholder={mode === 'spelling' ? '영어로 쓰기' : '뜻 쓰기'}
               className="input h-14 text-center text-2xl"
               onKeyDown={(e) => {

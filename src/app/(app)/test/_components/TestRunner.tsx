@@ -1,5 +1,6 @@
 'use client';
 
+import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import { unstable_rethrow } from 'next/navigation';
 import { submitTestAction } from '@/app/actions';
@@ -192,9 +193,8 @@ function Runner({ testId, questions, title }: Props) {
           autoFocus
           autoComplete="off"
           autoCorrect="off"
-          autoCapitalize="off"
           spellCheck={false}
-          lang={isSpelling ? 'en' : 'ko'}
+          {...(isSpelling ? englishInputProps : koreanInputProps)}
           enterKeyHint={index === total - 1 ? 'done' : 'next'}
           maxLength={200}
           placeholder={isSpelling ? '영어로 쓰기' : '뜻을 한글로 쓰기'}
