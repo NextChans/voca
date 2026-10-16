@@ -24,7 +24,11 @@ async function loadImage(file: Blob): Promise<CanvasImageSource & { width: numbe
 
 /** 긴 변 1600px 이하로 줄여 JPEG(q=0.85) Blob 으로 */
 export async function downsizeImage(file: Blob): Promise<Blob> {
-  const src = await loadImage(file);
+  const src = await loadImage(file).catch(() => {
+    throw new Error(
+      '이 사진 형식은 이 브라우저에서 열 수 없어요. (아이폰 HEIC 사진은 아이폰에서 바로 찍거나 JPG로 올려 주세요)'
+    );
+  });
   const scale = Math.min(1, MAX_SIDE / Math.max(src.width, src.height));
   const w = Math.max(1, Math.round(src.width * scale));
   const h = Math.max(1, Math.round(src.height * scale));
