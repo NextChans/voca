@@ -1,0 +1,244 @@
+// 로컬 Supabase 데모 키(공개 기본값)만 사용. 운영 키를 넣지 말 것.
+// E2E: 로컬 Supabase + next start 대상 전체 흐름 검증
+import { chromium } from 'playwright-core';
+import pg from 'pg';
+
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000';
+const SB = 'http://127.0.0.1:54321';
+const SERVICE =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+const SHOTS = new URL('./shots/', import.meta.url).pathname;
+await import('node:fs').then((fs) => fs.mkdirSync(SHOTS, { recursive: true }));
+const db = new pg.Client({ connectionString: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' });
+
+async function createUser(email) {
+  const res = await fetch(`${SB}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password: 'password123!', email_confirm: true }),
+  });
+  if (!res.ok) throw new Error(`createUser ${res.status} ${await res.text()}`);
+}
+
+let step = 0;
+async function shot(page, name) {
+  await page.screenshot({ path: `${SHOTS}${String(++step).padStart(2, '0')}-${name}.png`, fullPage: true });
+}
+function log(...a) {
+  console.log('✔', ...a);
+}
+
+async function login(page, email) {
+  await page.goto(`${BASE}/`);
+  await page.waitForURL(/\/login/);
+  await page.locator('input[name=email]').fill(email);
+  await page.locator('input[name=password]').first().fill('password123!');
+  await page.locator('form button[type=submit]').first().click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15000 });
+}
+
+async function main() {
+  await db.connect();
+  await createUser('dad@test.local');
+  await createUser('mom@test.local');
+
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+  const dad = await browser.newPage({ viewport: { width: 820, height: 1180 } });
+  const errors = [];
+  dad.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  dad.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
+
+  // 1. 로그인 → 온보딩 → 가족 생성
+  await login(dad, 'dad@test.local');
+  await dad.waitForURL(/\/onboarding/);
+  await shot(dad, 'onboarding');
+  await dad.getByPlaceholder('예: 행복한 우리집').fill('우리집');
+  await dad.getByPlaceholder('예: 아빠, 엄마').fill('아빠');
+  await dad.getByRole('button', { name: /가족 만들기/ }).click();
+  await dad.waitForURL(/\/profiles/);
+  log('가족 생성');
+
+  // 2. 자녀 2명 추가
+  for (const name of ['지우', '하준']) {
+    await dad.getByPlaceholder('예: 지우').fill(name);
+    await dad.getByRole('button', { name: /자녀 추가|추가하기|추가/ }).last().click();
+    await dad.getByText(name, { exact: true }).first().waitFor();
+  }
+  await shot(dad, 'profiles');
+  log('자녀 2명 추가');
+
+  // 3. 부모 PIN 설정
+  await dad.goto(`${BASE}/settings`);
+  await shot(dad, 'settings-nopin');
+  await dad.locator('input[name=pin]').last().fill('1234');
+  await dad.locator('#confirm_pin').fill('1234');
+  await dad.getByRole('button', { name: /PIN.*(저장|설정)|저장/ }).first().click();
+  await dad.getByText(/PIN을 저장했어요/).waitFor();
+  log('PIN 설정');
+
+  // 4. 초대코드 → 엄마 합류
+  await dad.getByRole('button', { name: /초대코드/ }).click();
+  const codeEl = dad.getByText(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/).first();
+  await codeEl.waitFor();
+  const code = (await codeEl.textContent()).trim();
+  await shot(dad, 'invite');
+  const momCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const mom = await momCtx.newPage();
+  await login(mom, 'mom@test.local');
+  await mom.waitForURL(/\/onboarding/);
+  await mom.getByPlaceholder('ABCD-EFGH').fill(code.toLowerCase());
+  await mom.getByPlaceholder('예: 엄마, 아빠').fill('엄마');
+  await mom.getByRole('button', { name: /합류/ }).click();
+  await mom.waitForURL(/\/profiles/);
+  await mom.getByText('하준').first().waitFor();
+  log('엄마 초대코드 합류, 같은 자녀 목록 확인', code);
+
+  // 5. 지우 선택 → 단어 50개 붙여넣기 등록
+  await dad.goto(`${BASE}/profiles`);
+  await dad.getByRole('button', { name: /지우/ }).first().click();
+  await dad.waitForURL(`${BASE}/`);
+  await dad.goto(`${BASE}/words/new`);
+  await dad.getByRole('tab', { name: /붙여넣기/ }).click().catch(() => dad.getByText(/붙여넣기/).first().click());
+  const lines = Array.from({ length: 52 }, (_, i) => `word${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))} - 뜻${i + 1}`);
+  lines[0] = 'apple - 사과, 능금';
+  lines[1] = 'be good at ~을 잘하다';
+  lines[2] = '① happy 행복한';
+  await dad.getByLabel('단어 목록 붙여넣기').fill(lines.join('\n'));
+  await dad.getByRole('button', { name: /표로 옮기기/ }).click();
+  await dad.getByText(/52개/).first().waitFor();
+  await shot(dad, 'words-new');
+  await dad.getByRole('button', { name: /52개 저장/ }).click();
+  await dad.getByText(/52개 저장했어요/).waitFor();
+  log('단어 52개 등록');
+
+  // 6. 오늘 등록 → 시험 불가 확인
+  await dad.goto(`${BASE}/test/new`);
+  await shot(dad, 'test-new-blocked');
+  if (await dad.getByRole('button', { name: /시험 시작/ }).count()) throw new Error('오늘 등록한 단어로 시험이 시작 가능함');
+  log('등록 당일 시험 불가 확인');
+
+  // 7. 등록일을 어제로 → 시험 시작 (철자/뜻 섞어서)
+  await db.query(`update public.words set created_at = now() - interval '1 day'`);
+  await dad.goto(`${BASE}/words`);
+  await shot(dad, 'words-list');
+  await dad.goto(`${BASE}/test/new`);
+  await dad.getByText(/섞어서/).first().click();
+  await dad.getByRole('button', { name: /시험 시작/ }).click();
+  await dad.waitForURL(/\/test\/[0-9a-f-]{36}$/);
+  const testId = dad.url().split('/').pop();
+  log('시험 시작', testId);
+
+  // 응시 화면 HTML 에 정답 철자가 없는지 (spelling 문항)
+  const items = (
+    await db.query(`select id, direction, term, meaning, seq from public.test_items where test_id = $1 order by seq`, [testId])
+  ).rows;
+  const html = await dad.content();
+  const leaked = items.filter((i) => i.direction === 'spelling' && html.includes(`"${i.term}"`));
+  if (leaked.length) throw new Error(`철자 정답 노출: ${leaked.map((i) => i.term).join(',')}`);
+  log(`정답 비노출 확인 (spelling ${items.filter((i) => i.direction === 'spelling').length}문항)`);
+
+  // TTS 라우트: 문항 id 로 음성 요청 시 인증 필요 + 동작
+  const ttsStatus = await dad.evaluate(async (id) => (await fetch(`/api/tts?item=${id}`)).status, items[0].id);
+  log('TTS item status', ttsStatus);
+
+  // 8. 응시: 앞 5문항은 오답, 나머지는 정답 (뜻 문항은 공백 섞어 입력)
+  const input = dad.locator('input.input').first();
+  await input.waitFor();
+  await shot(dad, 'test-q1');
+  for (const it of items) {
+    let ans = it.direction === 'spelling' ? it.term.toUpperCase() : it.meaning.split(',')[0].split('').join(' ');
+    if (it.seq <= 5) ans = 'wrong';
+    await input.fill(ans);
+    await input.press('Enter');
+  }
+  await shot(dad, 'test-end');
+  // 마지막 문항에서 Enter → 제출 확인 대화상자가 열림
+  await dad.getByText('모두 답했어요! 제출할까요?').waitFor();
+  await dad.getByRole('button', { name: /^제출하기$/ }).click();
+  await dad.waitForURL(/\/results\//, { timeout: 15000 });
+  await shot(dad, 'result');
+  const t = (await db.query(`select status, correct, total from public.tests where id = $1`, [testId])).rows[0];
+  if (t.status !== 'submitted' || t.correct !== t.total - 5) throw new Error(`채점 이상: ${JSON.stringify(t)}`);
+  log('제출·채점', `${t.correct}/${t.total}`);
+
+  // 9. 부모 정정: 첫 오답 '정답 인정'
+  await dad.getByRole('button', { name: /정답 인정/ }).first().click();
+  await dad.waitForTimeout(1500);
+  const t2 = (await db.query(`select correct from public.tests where id = $1`, [testId])).rows[0];
+  if (t2.correct !== t.correct + 1) throw new Error(`정정 반영 안 됨 ${t2.correct}`);
+  const ov = (await db.query(`select overridden_by from public.test_items where test_id = $1 and overridden_by is not null`, [testId])).rows;
+  log('부모 정정 반영', t2.correct, 'overridden_by 기록', ov.length);
+  await shot(dad, 'result-overridden');
+
+  // 10. 재시험 (틀린 4개)
+  await dad.getByRole('button', { name: /재시험/ }).first().click();
+  await dad.waitForURL(/\/test\/[0-9a-f-]{36}$/);
+  const retestId = dad.url().split('/').pop();
+  const r = (await db.query(`select kind, total from public.tests where id = $1`, [retestId])).rows[0];
+  if (r.kind !== 'retest' || r.total !== 4) throw new Error(`재시험 이상 ${JSON.stringify(r)}`);
+  log('재시험 생성', r.total, '문항');
+
+  // 11. 부모 모드 잠금 → 자녀 모드에서는 관리 기능 숨김 + 서버 액션 차단
+  await dad.goto(`${BASE}/words`);
+  await dad.getByRole('button', { name: /부모 모드/ }).click();
+  await dad.waitForTimeout(800);
+  await dad.goto(`${BASE}/words/new`);
+  await shot(dad, 'words-new-locked');
+  await dad.getByRole('tab', { name: /붙여넣기/ }).waitFor();
+  await dad.goto(`${BASE}/words`);
+  if (await dad.getByRole('button', { name: /삭제/ }).count()) throw new Error('잠금 상태에서 삭제 버튼 노출');
+  log('부모 모드 잠금: 단어 등록 가능, 수정·삭제 불가');
+
+  // 12. 같은 주 정기 시험 2회 제한
+  await db.query(`update public.tests set status='cancelled' where id = $1`, [retestId]);
+  await db.query(
+    `insert into public.words (family_id, learner_id, term, meaning, created_at)
+     select family_id, learner_id, 'extra' || chr(96 + g) || chr(96 + g), '추가' || g, now() - interval '1 day'
+       from public.words, generate_series(1, 26) g where term = 'apple' limit 26`
+  );
+  await db.query(
+    `insert into public.words (family_id, learner_id, term, meaning, created_at)
+     select family_id, learner_id, 'more' || chr(96 + g) || chr(97 + g), '더' || g, now() - interval '1 day'
+       from public.words, generate_series(1, 25) g where term = 'apple' limit 25`
+  );
+  await dad.goto(`${BASE}/test/new`);
+  await dad.getByRole('button', { name: /시험 시작/ }).click();
+  await dad.waitForURL(/\/test\/[0-9a-f-]{36}$/);
+  const second = dad.url().split('/').pop();
+  await db.query(`update public.tests set status='cancelled' where id = $1`, [second]); // 취소분은 횟수 제외
+  await db.query(
+    `insert into public.tests (family_id, learner_id, kind, mode, week_start, total, correct, status, submitted_at)
+     select family_id, learner_id, 'regular', 'spelling', public.kst_week_start(), 1, 1, 'submitted', now() from public.tests where id = $1`,
+    [testId]
+  );
+  await dad.goto(`${BASE}/test/new`);
+  await shot(dad, 'test-new-weekly-limit');
+  if (await dad.getByRole('button', { name: /시험 시작/ }).count()) throw new Error('주 2회 초과 시작 가능');
+  log('주 2회 제한 확인');
+
+  // 13. 하준(다른 자녀)은 독립: 단어 0개
+  await mom.goto(`${BASE}/profiles`);
+  await mom.getByRole('button', { name: /하준/ }).first().click();
+  await mom.waitForURL(`${BASE}/`);
+  await mom.goto(`${BASE}/words`);
+  await shot(mom, 'mom-hajun-words');
+  if (await mom.getByText('apple').count()) throw new Error('자녀 간 단어 섞임');
+  log('자녀별 데이터 분리 확인');
+
+  // 14. 기록 화면
+  await dad.goto(`${BASE}/results`);
+  await shot(dad, 'results');
+  await dad.goto(`${BASE}/`);
+  await shot(dad, 'home');
+
+  console.log('\nbrowser errors:', errors.length ? errors : 'none');
+  await browser.close();
+  await db.end();
+}
+
+main().catch(async (e) => {
+  console.error('✘', e.message);
+  process.exitCode = 1;
+  await db.end().catch(() => {});
+  process.exit(1);
+});
