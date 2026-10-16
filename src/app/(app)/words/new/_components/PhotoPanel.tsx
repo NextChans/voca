@@ -111,8 +111,14 @@ export function PhotoPanel({ aiOcr, onParsed }: { aiOcr: boolean; onParsed: (wor
 
   return (
     <div className="space-y-3">
+      {!aiOcr && (
+        <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          ⚠️ 지금은 <b>기기 내 글자 인식</b>만 켜져 있어요. 예문·발음기호가 함께 있는 교재(사전형 단어장)는
+          제대로 읽지 못해요. 부모님이 서버에 AI 사진 인식 키를 설정하면 교재도 정확히 읽을 수 있어요.
+        </p>
+      )}
       <p className="text-sm text-slate-600">
-        단어장 페이지를 반듯하게, 밝은 곳에서 찍어 주세요.{' '}
+        한 번에 <b>한 페이지씩</b>, 글자가 크게 보이도록 반듯하게 밝은 곳에서 찍어 주세요.{' '}
         <span className="text-slate-400">
           ({aiOcr ? 'AI 인식' : '기기에서 인식 · 손글씨는 잘 안 읽혀요'} · 사진은 저장되지 않아요)
         </span>
