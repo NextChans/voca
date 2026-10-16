@@ -8,7 +8,7 @@ import { RetestButton } from '../_components/RetestButton';
 
 export const metadata = { title: '시험 보기' };
 
-const MAX_ITEMS = 300; // DB create_test 의 한도와 동일
+const MAX_ITEMS = 300; // DB create_test 의 1회 출제 한도 (넘치면 오래된 순 300개, 나머지는 다음 시험)
 
 function nextMondayLabel(): string {
   const start = Date.parse(`${kstWeekStart()}T00:00:00Z`) + 7 * 24 * 60 * 60 * 1000;
@@ -37,17 +37,22 @@ export default async function NewTestPage() {
   const minWords = learner.min_test_words;
   const weekFull = usedThisWeek >= limit;
   const enoughWords = testable >= minWords;
-  const tooMany = testable > MAX_ITEMS;
-  const canStart = !inProgress && !weekFull && enoughWords && !tooMany;
+  const questionCount = Math.min(testable, MAX_ITEMS);
+  const canStart = !inProgress && !weekFull && enoughWords;
 
   // 재시험 가능: 틀린 문항이 있고, 아직 그 시험에서 이어진 (제출된) 재시험이 없는 것 = 재시험 사슬의 끝
   const submittedChildOf = new Set(
-    tests.filter((t) => t.kind === 'retest' && t.status === 'submitted' && t.parent_test_id).map((t) => t.parent_test_id)
+    tests
+      .filter((t) => t.kind === 'retest' && t.status === 'submitted' && t.parent_test_id)
+      .map((t) => t.parent_test_id)
   );
   const retestable = tests
     .filter(
       (t) =>
-        t.status === 'submitted' && t.correct !== null && t.correct < t.total && !submittedChildOf.has(t.id)
+        t.status === 'submitted' &&
+        t.correct !== null &&
+        t.correct < t.total &&
+        !submittedChildOf.has(t.id)
     )
     .slice(0, 5);
 
@@ -77,7 +82,9 @@ export default async function NewTestPage() {
             <span className={enoughWords ? 'text-emerald-600' : 'text-amber-600'}>{testable}</span>
             <span className="text-xl text-slate-400">개</span>
           </p>
-          <p className="mt-1 text-xs text-slate-500">최소 {minWords}개가 모여야 시험을 볼 수 있어요</p>
+          <p className="mt-1 text-xs text-slate-500">
+            최소 {minWords}개가 모여야 시험을 볼 수 있어요
+          </p>
         </div>
       </section>
 
@@ -86,8 +93,8 @@ export default async function NewTestPage() {
           <p className="text-4xl">📝</p>
           <p className="mt-2 text-lg font-bold">풀던 시험이 있어요!</p>
           <p className="mt-1 text-sm text-slate-600">
-            {inProgress.kind === 'retest' ? '재시험' : '정기 시험'} · {MODE_LABEL[inProgress.mode]} ·{' '}
-            {inProgress.total}문제 · {formatKst(inProgress.started_at)} 시작
+            {inProgress.kind === 'retest' ? '재시험' : '정기 시험'} · {MODE_LABEL[inProgress.mode]}{' '}
+            · {inProgress.total}문제 · {formatKst(inProgress.started_at)} 시작
           </p>
           <Link href={`/test/${inProgress.id}`} className="btn-primary mt-4 h-14 w-full text-lg">
             이어서 풀기 →
@@ -99,9 +106,18 @@ export default async function NewTestPage() {
       ) : canStart ? (
         <section className="card">
           <p className="mb-4 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            🎯 아직 시험 보지 않은 단어 <b>{testable}개</b>가 전부 나와요. 차근차근 해 봐요!
+            {testable > MAX_ITEMS ? (
+              <>
+                🎯 쌓인 단어 {testable}개 중 먼저 등록한 <b>{questionCount}개</b>가 나와요. 나머지는
+                다음 시험에!
+              </>
+            ) : (
+              <>
+                🎯 아직 시험 보지 않은 단어 <b>{testable}개</b>가 전부 나와요. 차근차근 해 봐요!
+              </>
+            )}
           </p>
-          <StartTestForm count={testable} />
+          <StartTestForm count={questionCount} />
         </section>
       ) : (
         <section className="card text-center">
@@ -118,20 +134,13 @@ export default async function NewTestPage() {
                 </p>
               )}
             </>
-          ) : tooMany ? (
-            <>
-              <p className="text-4xl">📚</p>
-              <p className="mt-2 text-lg font-bold">단어가 너무 많이 쌓였어요 ({testable}개)</p>
-              <p className="mt-1 text-slate-600">
-                한 번에 {MAX_ITEMS}개까지만 시험을 볼 수 있어요. 부모님께 말씀드려 주세요.
-              </p>
-            </>
           ) : (
             <>
               <p className="text-4xl">🌱</p>
               <p className="mt-2 text-lg font-bold">단어를 조금 더 모아 볼까요?</p>
               <p className="mt-1 text-slate-600">
-                시험을 보려면 단어가 <b>{minWords - testable}개</b> 더 필요해요. ({testable} / {minWords})
+                시험을 보려면 단어가 <b>{minWords - testable}개</b> 더 필요해요. ({testable} /{' '}
+                {minWords})
               </p>
               {addedToday > 0 && (
                 <p className="mt-1 text-sm text-slate-500">
@@ -159,7 +168,8 @@ export default async function NewTestPage() {
                 <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <Link href={`/results/${t.id}`} className="min-w-0 hover:underline">
                     <span className="block font-semibold">
-                      {formatKst(t.submitted_at ?? t.started_at, false)} {t.kind === 'retest' ? '재시험' : '정기 시험'}
+                      {formatKst(t.submitted_at ?? t.started_at, false)}{' '}
+                      {t.kind === 'retest' ? '재시험' : '정기 시험'}
                     </span>
                     <span className="block text-sm text-slate-500">
                       {MODE_LABEL[t.mode]} · {t.correct}/{t.total} 맞음 · 틀린 단어 {wrong}개

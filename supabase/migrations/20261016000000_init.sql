@@ -8,7 +8,7 @@
 --
 -- 출제 규칙 (create_test 에서 강제):
 --   * 정기 시험: 주(KST 월요일 시작)당 learners.weekly_limit 회 (기본 2회)
---   * 출제 대상: 등록일(KST) 다음 날부터 + 아직 정기 시험에 나온 적 없는 단어 전부
+--   * 출제 대상: 등록일(KST) 다음 날부터 + 아직 정기 시험에 나온 적 없는 단어 전부 (최대 300, 오래된 순)
 --   * 출제 대상이 learners.min_test_words 개(기본 50) 미만이면 시험 불가
 --   * 재시험: 제출된 시험의 틀린 문항만. 주간 횟수에 포함되지 않음
 --
@@ -289,7 +289,10 @@ begin
           where i.word_id = w.id
             and t.kind = 'regular'
             and t.status <> 'cancelled'
-       );
+       )
+     -- 한 번에 최대 300개. 넘치면 먼저 등록한 단어부터 출제하고 나머지는 다음 시험으로
+     order by w.created_at, w.id
+     limit 300;
 
     get diagnostics v_count = row_count;
     if v_count < v_learner.min_test_words then

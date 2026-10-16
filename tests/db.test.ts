@@ -158,6 +158,20 @@ describe('create_test (regular)', () => {
     await expectError(createTest(family, learner), 'WEEKLY_LIMIT_REACHED');
   });
 
+  it('출제 대상이 300개를 넘으면 오래된 300개만 출제하고 나머지는 다음 시험으로 남긴다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await addWords(family, learner, 300, 3, 'old');
+    await addWords(family, learner, 60, 1, 'new');
+    const t1 = await createTest(family, learner);
+    const terms = await q<{ term: string }>(`select term from public.test_items where test_id = $1`, [t1]);
+    expect(terms).toHaveLength(300);
+    expect(terms.every((t) => t.term.startsWith('old'))).toBe(true);
+    await submitAll(family, t1, () => true);
+    const t2 = await createTest(family, learner);
+    const rest = await q<{ term: string }>(`select term from public.test_items where test_id = $1`, [t2]);
+    expect(rest).toHaveLength(60);
+  });
+
   it('다른 가족의 자녀로는 시험을 만들 수 없다', async () => {
     const { learner } = await createFamilyWithLearner();
     const { other } = await one<{ other: string }>(
