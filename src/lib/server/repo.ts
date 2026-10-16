@@ -427,6 +427,25 @@ export async function listRegularTestedWordIds(familyId: string, learnerId: stri
   return new Set((data ?? []).map((r) => r.word_id as string));
 }
 
+/** 오답 연습용: 이 자녀의 제출된 시험 문항 결과 (정답 포함 — 연습 화면 전용) */
+export async function listSubmittedItemResults(
+  familyId: string,
+  learnerId: string
+): Promise<{ word_id: string | null; term: string; meaning: string; is_correct: boolean | null; submitted_at: string }[]> {
+  const { data, error } = await db()
+    .from('test_items')
+    .select('word_id, term, meaning, is_correct, tests!inner(learner_id, status, submitted_at)')
+    .eq('family_id', familyId)
+    .eq('tests.learner_id', learnerId)
+    .eq('tests.status', 'submitted')
+    .limit(10000);
+  if (error) fail(error, 'listSubmittedItemResults');
+  return (data ?? []).map((r) => {
+    const t = r.tests as unknown as { submitted_at: string };
+    return { word_id: r.word_id, term: r.term, meaning: r.meaning, is_correct: r.is_correct, submitted_at: t.submitted_at };
+  });
+}
+
 // ================================================================ 시험
 
 const TEST_COLUMNS =

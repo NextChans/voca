@@ -59,6 +59,7 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | 채점: 철자 = 대소문자·공백·둥근따옴표 무시, `a / b` 변형 허용. 뜻 = `, ; / ·` 로 나눈 후보 중 일치, 괄호·공백·문장부호 무시, 여러 개 쓰면 전부 맞아야 정답 | `src/lib/domain/grading.ts` |
 | 부모 정답 인정/취소 → 점수 재계산 + 정정자 기록 | SQL `override_item` |
 | 시험 취소 = 부모 모드만, 취소분은 횟수·출제 이력에서 제외 | `cancelTestAction` |
+| 오답 연습 = 제출된 시험 문항 결과(정정 반영)에서 한 번이라도 틀린 단어. 클라이언트에서 채점·반복, 서버에 아무것도 기록하지 않음 | `buildPracticeWords`(`src/lib/domain/practice.ts`), `/practice` |
 | 단어 추가 = 누구나(자녀 포함), 수정·삭제 = 부모 모드 | `addWordsAction` / `updateWordAction` / `deleteWordAction` |
 
 ## 5. 요청 흐름 예시: 시험

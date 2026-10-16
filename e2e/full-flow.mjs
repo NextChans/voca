@@ -170,7 +170,27 @@ async function main() {
   log('부모 정정 반영', t2.correct, 'overridden_by 기록', ov.length);
   await shot(dad, 'result-overridden');
 
+  // 9-1. 오답 연습: 최근 틀린 4개(1개는 부모 정정) → 카드 모드로 끝까지, 뜻 쓰기 1문항 채점
+  await dad.goto(`${BASE}/practice`);
+  await dad.getByText('마지막 시험에서 틀린 4개').waitFor();
+  await dad.getByRole('button', { name: /연습 시작 \(4개\)/ }).click();
+  await dad.getByRole('button', { name: /다시 볼래요/ }).click(); // 첫 카드는 뒤로 보내기
+  for (let i = 0; i < 4; i++) await dad.getByRole('button', { name: /알아요/ }).click();
+  await dad.getByText('연습 끝! 모두 맞혔어요').waitFor();
+  await shot(dad, 'practice-done');
+  await dad.getByRole('button', { name: '처음으로' }).click();
+  await dad.getByRole('button', { name: /뜻 쓰기/ }).click();
+  await dad.getByRole('button', { name: /연습 시작/ }).click();
+  const prompt = (await dad.locator('.card p.text-3xl').textContent()).trim();
+  const meaning = (await db.query(`select meaning from public.words where term = $1`, [prompt])).rows[0].meaning;
+  await dad.locator('input.input').fill(meaning.split(',')[0]);
+  await dad.getByRole('button', { name: '확인' }).click();
+  await dad.getByText('⭕ 정답!').waitFor();
+  const testsBefore = (await db.query(`select count(*)::int c from public.tests`)).rows[0].c;
+  log('오답 연습: 카드 모드 완주 + 뜻 쓰기 즉시 채점', `(시험 수 ${testsBefore}, 연습은 기록 안 함)`);
+
   // 10. 재시험 (틀린 4개)
+  await dad.goto(`${BASE}/results/${testId}`);
   await dad.getByRole('button', { name: /재시험/ }).first().click();
   await dad.waitForURL(/\/test\/[0-9a-f-]{36}$/);
   const retestId = dad.url().split('/').pop();
