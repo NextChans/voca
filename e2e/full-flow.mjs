@@ -118,9 +118,14 @@ async function main() {
   log('등록 당일 시험 불가 확인');
 
   // 7. 등록일을 어제로 → 시험 시작 (철자/뜻 섞어서)
-  await db.query(`update public.words set created_at = now() - interval '1 day'`);
+  await db.query(`update public.words set created_at = created_at - interval '1 day'`);
   await dad.goto(`${BASE}/words`);
   await shot(dad, 'words-list');
+  const order = await dad.evaluate(() =>
+    [...document.querySelectorAll('[lang="en"]')].map((e) => e.textContent?.trim()).filter(Boolean).slice(0, 4)
+  );
+  if (order.join('|') !== 'apple|be good at|happy|wordda') throw new Error(`등록 순서와 다름: ${order.join(', ')}`);
+  log('단어 목록이 등록한 순서대로 표시', order.join(' → '));
   await dad.goto(`${BASE}/test/new`);
   await dad.getByText(/섞어서/).first().click();
   await dad.getByRole('button', { name: /시험 시작/ }).click();

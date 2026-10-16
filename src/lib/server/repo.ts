@@ -352,7 +352,8 @@ export async function listWords(familyId: string, learnerId: string): Promise<Wo
     .select('id, term, meaning, created_at')
     .eq('family_id', familyId)
     .eq('learner_id', learnerId)
-    .order('created_at', { ascending: false })
+    // 등록한 순서대로 (같은 시각에 저장된 과거 데이터만 철자순으로 보조 정렬)
+    .order('created_at', { ascending: true })
     .order('term');
   if (error) fail(error, 'listWords');
   return data ?? [];
@@ -376,9 +377,19 @@ export async function addWords(
     fresh.push({ term: r.term.trim(), meaning: r.meaning.trim() });
   }
   if (fresh.length > 0) {
+    const base = Date.now();
     const { error } = await db()
       .from('words')
-      .insert(fresh.map((r) => ({ ...r, family_id: familyId, learner_id: learnerId, created_by: userId })));
+      .insert(
+        // 한 번에 저장해도 입력 순서가 유지되도록 1ms 씩 증가시킨 등록 시각을 부여
+        fresh.map((r, i) => ({
+          ...r,
+          family_id: familyId,
+          learner_id: learnerId,
+          created_by: userId,
+          created_at: new Date(base + i).toISOString(),
+        }))
+      );
     if (error) fail(error, 'addWords');
   }
   return { added: fresh.length, skipped: rows.length - fresh.length };
