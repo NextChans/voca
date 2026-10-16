@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireLearner } from '@/lib/server/context';
-import { serverEnv } from '@/lib/server/env';
+import { activeOcrProvider } from '@/lib/server/ocr';
 import { WordEntry } from './_components/WordEntry';
 
 export const metadata = { title: '단어 등록' };
@@ -20,7 +20,7 @@ export default async function NewWordsPage() {
         </h1>
       </div>
 
-      <WordEntry aiOcr={Boolean(serverEnv.anthropicApiKey())} learnerName={learner.name} />
+      <WordEntry aiOcr={activeOcrProvider() !== null} learnerName={learner.name} />
     </div>
   );
 }
