@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: { default: '단어 시험', template: '%s · 단어 시험' },
   description: '영어 단어 성취도 평가',
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: '단어 시험', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
