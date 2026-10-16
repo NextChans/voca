@@ -10,3 +10,6 @@ next-env.d.ts
 .vercel
 .DS_Store
 supabase/.temp
+
+# e2e 스크린샷
+e2e/shots

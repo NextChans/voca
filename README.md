@@ -9,6 +9,18 @@
 - **사진 인식**: Gemini(`GEMINI_API_KEY`, 무료 등급 가능) → Claude(`ANTHROPIC_API_KEY`) → 브라우저 내 Tesseract OCR 순으로 사용
 - **발음**: 기기 내장 음성(Web Speech API) + 서버 TTS(`/api/tts`, 시험 철자 문항)
 
+**운영**: https://voca-pink.vercel.app
+
+## 문서
+
+| 문서 | 내용 |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) | AI·개발자 작업 지침 (명령어, 반드시 지킬 규칙, 코드 지도) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 구조, 역할·권한, 데이터 모델, 규칙 위치, OCR·TTS |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | 운영 환경, 환경변수, 배포·마이그레이션 절차, 장애 대응 |
+| [docs/HISTORY.md](docs/HISTORY.md) | PR 이력, 요구사항, 결정 이유, 알려진 한계, 후속 후보 |
+| [e2e/README.md](e2e/README.md) | Playwright E2E 실행법 |
+
 ---
 
 ## 기능 요약
@@ -102,7 +114,9 @@ src/app/actions.ts     Server Actions (입력 검증 → 인가 → repo)
 src/app/(app)/         로그인 후 화면 (홈, 단어, 시험, 기록, 설정, 프로필)
 src/app/api/tts        발음 합성 (문항 id 기반)
 src/app/api/ocr        사진 → 단어 목록 (src/lib/server/ocr: Gemini / Claude)
-src/lib/domain/        순수 도메인 로직 (채점, 주차, 파싱, PIN/토큰)
+src/lib/domain/        순수 도메인 로직 (채점, 주차, 파싱, PIN/토큰, 초대코드, 자녀 아이디)
 src/lib/server/        서버 전용 (인증 컨텍스트, 부모 모드, repo)
 tests/                 vitest
+e2e/                   Playwright E2E (e2e/README.md)
+docs/                  아키텍처·운영·이력 문서
 ```
