@@ -4,6 +4,9 @@ import { useActionState, useState } from 'react';
 import {
   cancelTestAction,
   createInviteAction,
+  createLearnerLoginAction,
+  removeLearnerLoginAction,
+  resetLearnerPasswordAction,
   setPinAction,
   unlockParentAction,
   updateLearnerAction,
@@ -209,6 +212,106 @@ export function InviteCreator() {
           {state.message && <p className="mt-3 text-sm text-slate-600">{state.message}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 자녀 로그인 계정 만들기 / 비밀번호 재설정 / 삭제 */
+export function LearnerLoginForm({ learner }: { learner: Learner }) {
+  const [createState, createAction] = useActionState(createLearnerLoginAction, initial);
+  const [resetState, resetAction] = useActionState(resetLearnerPasswordAction, initial);
+  const [removeState, setRemoveState] = useState<ActionState>({});
+  const [removing, setRemoving] = useState(false);
+  const pwFields = (prefix: string) => (
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <label htmlFor={`${prefix}_pw_${learner.id}`} className="label">
+          비밀번호
+        </label>
+        <input
+          id={`${prefix}_pw_${learner.id}`}
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+          className="input"
+        />
+      </div>
+      <div>
+        <label htmlFor={`${prefix}_cf_${learner.id}`} className="label">
+          비밀번호 확인
+        </label>
+        <input
+          id={`${prefix}_cf_${learner.id}`}
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+          className="input"
+        />
+      </div>
+    </div>
+  );
+
+  if (!learner.login_id) {
+    return (
+      <form action={createAction} className="space-y-3">
+        <p className="text-sm text-slate-600">
+          🔑 {learner.name} 전용 아이디를 만들면 부모님 없이 혼자 로그인할 수 있어요. (부모 기능은 쓸 수 없어요)
+        </p>
+        <input type="hidden" name="learnerId" value={learner.id} />
+        <div>
+          <label htmlFor={`login_${learner.id}`} className="label">
+            아이디 (영어 소문자·숫자·_ 3~20자)
+          </label>
+          <input
+            id={`login_${learner.id}`}
+            name="login_id"
+            required
+            pattern="[a-z0-9_]{3,20}"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className="input"
+            placeholder="예: jiwoo"
+          />
+        </div>
+        {pwFields('new')}
+        <SubmitButton pendingText="만드는 중…">로그인 계정 만들기</SubmitButton>
+        <FormMessage state={createState} />
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-600">
+        🔑 로그인 아이디: <b className="font-mono">{learner.login_id}</b>
+      </p>
+      <form action={resetAction} className="space-y-3">
+        <input type="hidden" name="learnerId" value={learner.id} />
+        {pwFields('reset')}
+        <SubmitButton className="btn-secondary" pendingText="바꾸는 중…">
+          비밀번호 바꾸기
+        </SubmitButton>
+        <FormMessage state={resetState} />
+      </form>
+      <button
+        type="button"
+        className="btn-ghost text-rose-600"
+        disabled={removing}
+        onClick={async () => {
+          if (!confirm(`${learner.name}의 로그인 계정을 삭제할까요? 단어와 시험 기록은 그대로 남아요.`)) return;
+          setRemoving(true);
+          setRemoveState(await removeLearnerLoginAction(learner.id));
+          setRemoving(false);
+        }}
+      >
+        {removing ? '삭제하는 중…' : '로그인 계정 삭제'}
+      </button>
+      <FormMessage state={removeState} />
     </div>
   );
 }

@@ -21,7 +21,7 @@ export default async function LoginPage({
         </div>
         <h1 className="mt-3 text-2xl font-bold">우리 가족 영어 단어 시험</h1>
         <p className="mt-2 text-sm text-slate-500">
-          부모님 계정으로 로그인해요. 아이들은 로그인 후 프로필을 골라 공부해요.
+          부모님은 이메일로, 아이들은 부모님이 만들어 준 아이디로 로그인해요.
         </p>
       </div>
       {linkFailed && (

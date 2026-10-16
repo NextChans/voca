@@ -6,6 +6,7 @@ import * as repo from '@/lib/server/repo';
 import {
   CancelTestButton,
   InviteCreator,
+  LearnerLoginForm,
   LearnerSettingsForm,
   SetPinForm,
   UnlockForm,
@@ -44,7 +45,8 @@ export default async function SettingsPage({
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">⚙️ 설정</h1>
 
-      {/* a. 부모 모드 */}
+      {/* a. 부모 모드 (자녀 계정에는 표시하지 않음) */}
+      {member.role === 'parent' && (
       <section className="card space-y-3" aria-labelledby="parent-mode-title">
         <h2 id="parent-mode-title" className="text-lg font-bold">
           부모 모드
@@ -69,6 +71,7 @@ export default async function SettingsPage({
           <p className="text-sm text-slate-600">PIN을 정하면 부모 모드를 잠글 수 있어요.</p>
         )}
       </section>
+      )}
 
       {parentMode && (
         <>
@@ -101,6 +104,9 @@ export default async function SettingsPage({
                   return (
                     <li key={l.id} className="rounded-xl border border-slate-200 p-4">
                       <LearnerSettingsForm learner={l} />
+                      <div className="mt-4 border-t border-slate-100 pt-4">
+                        <LearnerLoginForm learner={l} />
+                      </div>
                       {test && (
                         <div className="mt-4 rounded-xl bg-amber-50 p-3">
                           <p className="text-sm text-amber-900">
@@ -151,7 +157,9 @@ export default async function SettingsPage({
         </h2>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <dt className="text-slate-500">로그인</dt>
-          <dd className="break-all">{user.email ?? '-'}</dd>
+          <dd className="break-all">
+            {member.role === 'child' ? `${member.display_name} 전용 아이디` : (user.email ?? '-')}
+          </dd>
           <dt className="text-slate-500">가족</dt>
           <dd>{member.family_name}</dd>
           <dt className="text-slate-500">내 이름</dt>
@@ -164,7 +172,7 @@ export default async function SettingsPage({
         </form>
       </section>
 
-      {!parentMode && (
+      {!parentMode && member.role === 'parent' && (
         <p className="text-center text-xs text-slate-400">
           자녀 설정·PIN 변경·가족 초대는 부모 모드에서 볼 수 있어요.
         </p>

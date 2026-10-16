@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { toAuthEmail } from '@/lib/domain/kidLogin';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 type Mode = 'signin' | 'signup';
@@ -9,7 +10,7 @@ type Mode = 'signin' | 'signup';
 /** Supabase 영문 오류 → 친절한 한국어 */
 function friendlyError(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login credentials')) return '이메일 또는 비밀번호가 맞지 않아요.';
+  if (m.includes('invalid login credentials')) return '이메일(아이디) 또는 비밀번호가 맞지 않아요.';
   if (m.includes('email not confirmed')) return '아직 이메일 인증을 하지 않았어요. 메일함에서 인증 링크를 눌러주세요.';
   if (m.includes('already registered') || m.includes('already been registered'))
     return '이미 가입된 이메일이에요. 로그인 탭에서 로그인해 주세요.';
@@ -52,7 +53,7 @@ export function LoginForm() {
     try {
       const supabase = createSupabaseBrowserClient();
       if (mode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: toAuthEmail(email), password });
         if (error) {
           setError(friendlyError(error.message));
           return;
@@ -114,16 +115,19 @@ export function LoginForm() {
       <form onSubmit={onSubmit} className="space-y-4" key={mode}>
         <div>
           <label htmlFor="email" className="label">
-            이메일
+            {mode === 'signin' ? '이메일 또는 아이디' : '이메일'}
           </label>
           <input
             id="email"
             name="email"
-            type="email"
-            autoComplete="email"
+            type={mode === 'signin' ? 'text' : 'email'}
+            autoComplete="username"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             required
             className="input"
-            placeholder="parent@example.com"
+            placeholder={mode === 'signin' ? '부모님 이메일 또는 아이 아이디' : 'parent@example.com'}
           />
         </div>
         <div>

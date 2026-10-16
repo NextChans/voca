@@ -13,6 +13,9 @@ export interface Membership {
   family_id: string;
   family_name: string;
   display_name: string;
+  /** parent: 가족 관리 가능한 부모 계정 / child: 특정 자녀에 고정된 자녀 계정 */
+  role: 'parent' | 'child';
+  learner_id: string | null;
 }
 export interface FamilyMember {
   user_id: string;
@@ -25,6 +28,7 @@ export interface Learner {
   avatar: string;
   weekly_limit: number;
   min_test_words: number;
+  login_id: string | null;
 }
 export interface Word {
   id: string;
@@ -83,6 +87,8 @@ const RPC_ERRORS: Record<string, string> = {
   TEST_NOT_IN_PROGRESS: '이미 제출했거나 취소된 시험이에요.',
   RESULT_MISMATCH: '채점 데이터가 올바르지 않아요. 다시 시도해 주세요.',
   ITEM_NOT_FOUND: '문항을 찾을 수 없어요.',
+  ACCOUNT_IS_LEARNER: '자녀 계정으로는 가족을 만들거나 합류할 수 없어요.',
+  ACCOUNT_IS_PARENT: '부모 계정은 자녀 계정으로 쓸 수 없어요.',
 };
 
 function fail(error: { message: string; code?: string } | null, context: string): never {
@@ -104,9 +110,33 @@ export async function getMembership(userId: string): Promise<Membership | null> 
     .eq('user_id', userId)
     .maybeSingle();
   if (error) fail(error, 'getMembership');
-  if (!data) return null;
-  const fam = data.families as unknown as { name: string } | null;
-  return { family_id: data.family_id, display_name: data.display_name, family_name: fam?.name ?? '' };
+  if (data) {
+    const fam = data.families as unknown as { name: string } | null;
+    return {
+      family_id: data.family_id,
+      display_name: data.display_name,
+      family_name: fam?.name ?? '',
+      role: 'parent',
+      learner_id: null,
+    };
+  }
+
+  // 자녀 로그인 계정
+  const { data: kid, error: kidError } = await db()
+    .from('learners')
+    .select('id, family_id, name, families(name)')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (kidError) fail(kidError, 'getMembership(learner)');
+  if (!kid) return null;
+  const fam = kid.families as unknown as { name: string } | null;
+  return {
+    family_id: kid.family_id,
+    display_name: kid.name,
+    family_name: fam?.name ?? '',
+    role: 'child',
+    learner_id: kid.id,
+  };
 }
 
 export async function listMembers(familyId: string): Promise<FamilyMember[]> {
@@ -186,7 +216,7 @@ export async function recordPinAttempt(familyId: string, success: boolean): Prom
 
 // ================================================================ 자녀
 
-const LEARNER_COLUMNS = 'id, name, avatar, weekly_limit, min_test_words';
+const LEARNER_COLUMNS = 'id, name, avatar, weekly_limit, min_test_words, login_id';
 
 export async function listLearners(familyId: string): Promise<Learner[]> {
   const { data, error } = await db()
@@ -230,6 +260,88 @@ export async function updateLearner(
     .eq('family_id', familyId)
     .eq('id', learnerId);
   if (error) fail(error, 'updateLearner');
+}
+
+// ================================================================ 자녀 로그인 계정
+
+/** 자녀 계정 생성: Auth 사용자 생성 → learners 연결. 연결 실패 시 Auth 사용자 삭제(보상 트랜잭션). */
+export async function createLearnerLogin(
+  familyId: string,
+  learnerId: string,
+  loginId: string,
+  email: string,
+  password: string
+): Promise<void> {
+  const learner = await getLearnerAuth(familyId, learnerId);
+  if (!learner) throw new DomainError('자녀 프로필을 찾을 수 없어요.');
+  if (learner.user_id) throw new DomainError('이미 로그인 계정이 있어요.');
+
+  const { data, error } = await db().auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { kind: 'learner', learner_id: learnerId },
+  });
+  if (error || !data.user) {
+    if (/already|registered|exists/i.test(error?.message ?? '')) {
+      throw new DomainError('이미 사용 중인 아이디예요. 다른 아이디를 골라 주세요.');
+    }
+    if (/password/i.test(error?.message ?? '')) {
+      throw new DomainError('비밀번호가 너무 쉬워요. 더 길게 정해 주세요.');
+    }
+    console.error('[repo] createLearnerLogin auth failed', error);
+    throw new Error('createLearnerLogin failed');
+  }
+
+  const { error: linkError } = await db()
+    .from('learners')
+    .update({ user_id: data.user.id, login_id: loginId })
+    .eq('family_id', familyId)
+    .eq('id', learnerId)
+    .is('user_id', null);
+  if (linkError) {
+    await db().auth.admin.deleteUser(data.user.id);
+    fail(linkError, 'createLearnerLogin(link)');
+  }
+}
+
+export async function resetLearnerPassword(familyId: string, learnerId: string, password: string): Promise<void> {
+  const learner = await getLearnerAuth(familyId, learnerId);
+  if (!learner?.user_id) throw new DomainError('로그인 계정이 없어요.');
+  const { error } = await db().auth.admin.updateUserById(learner.user_id, { password });
+  if (error) {
+    if (/password/i.test(error.message)) throw new DomainError('비밀번호가 너무 쉬워요. 더 길게 정해 주세요.');
+    console.error('[repo] resetLearnerPassword failed', error);
+    throw new Error('resetLearnerPassword failed');
+  }
+}
+
+/** 자녀 계정 삭제 (프로필·단어·시험 기록은 유지) */
+export async function removeLearnerLogin(familyId: string, learnerId: string): Promise<void> {
+  const learner = await getLearnerAuth(familyId, learnerId);
+  if (!learner?.user_id) return;
+  const { error: unlinkError } = await db()
+    .from('learners')
+    .update({ user_id: null, login_id: null })
+    .eq('family_id', familyId)
+    .eq('id', learnerId);
+  if (unlinkError) fail(unlinkError, 'removeLearnerLogin(unlink)');
+  const { error } = await db().auth.admin.deleteUser(learner.user_id);
+  if (error) console.error('[repo] removeLearnerLogin auth delete failed (unlinked already)', error);
+}
+
+async function getLearnerAuth(
+  familyId: string,
+  learnerId: string
+): Promise<{ user_id: string | null } | null> {
+  const { data, error } = await db()
+    .from('learners')
+    .select('user_id')
+    .eq('family_id', familyId)
+    .eq('id', learnerId)
+    .maybeSingle();
+  if (error) fail(error, 'getLearnerAuth');
+  return data;
 }
 
 // ================================================================ 단어

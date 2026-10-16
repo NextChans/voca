@@ -4,7 +4,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getUser } from '@/lib/server/auth';
 import { serverEnv } from '@/lib/server/env';
-import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
 
 /**
@@ -55,9 +54,6 @@ export async function POST(req: NextRequest) {
   if (!user) return error(401, '로그인이 필요해요.');
   const member = await repo.getMembership(user.id);
   if (!member) return error(403, 'forbidden');
-  if (!(await isParentMode(user.id, member.family_id))) {
-    return error(403, '부모 모드에서만 사용할 수 있어요.');
-  }
 
   const apiKey = serverEnv.anthropicApiKey();
   if (!apiKey) return error(501, 'AI 사진 인식이 설정되지 않았어요.');

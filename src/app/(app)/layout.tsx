@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { lockParentAction } from '@/app/actions';
-import { getSelectedLearner, requireMember } from '@/lib/server/context';
+import { getCurrentLearner, requireMember } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
 import { getPinState } from '@/lib/server/repo';
 
@@ -15,7 +15,7 @@ const NAV = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, member } = await requireMember();
   const [learner, parentMode, pin] = await Promise.all([
-    getSelectedLearner(member.family_id),
+    getCurrentLearner(member),
     isParentMode(user.id, member.family_id),
     getPinState(member.family_id),
   ]);
@@ -23,12 +23,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-        <Link href="/profiles" className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-100">
-          <span className="text-2xl">{learner?.avatar ?? '👨‍👩‍👧‍👦'}</span>
-          <span className="font-bold">{learner?.name ?? '자녀 선택'}</span>
-          <span className="text-xs text-slate-400">바꾸기</span>
-        </Link>
-        {!pin.parent_pin_hash ? (
+        {member.role === 'child' ? (
+          <div className="flex items-center gap-2 px-2 py-1">
+            <span className="text-2xl">{learner?.avatar ?? '🐣'}</span>
+            <span className="font-bold">{learner?.name}</span>
+          </div>
+        ) : (
+          <Link href="/profiles" className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-100">
+            <span className="text-2xl">{learner?.avatar ?? '👨‍👩‍👧‍👦'}</span>
+            <span className="font-bold">{learner?.name ?? '자녀 선택'}</span>
+            <span className="text-xs text-slate-400">바꾸기</span>
+          </Link>
+        )}
+        {member.role === 'child' ? (
+          <span className="badge bg-sky-100 px-3 py-1 text-sky-800">🧒 내 계정</span>
+        ) : !pin.parent_pin_hash ? (
           <Link href="/settings" className="badge bg-rose-100 px-3 py-1 text-rose-700">
             ⚠️ 부모 PIN 설정 필요
           </Link>

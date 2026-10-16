@@ -102,6 +102,37 @@ describe('family / invite', () => {
   });
 });
 
+describe('learner login', () => {
+  beforeEach(setup);
+
+  it('한 계정은 부모 또는 자녀 중 하나만 될 수 있다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    // 부모 계정을 자녀에 연결 불가
+    await expectError(
+      db.query(`update public.learners set user_id = $1 where id = $2`, [PARENT_A, learner]),
+      'ACCOUNT_IS_PARENT'
+    );
+    // 자녀 계정 연결 후, 그 계정으로 가족 합류/생성 불가
+    await db.query(`update public.learners set user_id = $1, login_id = 'jiwoo' where id = $2`, [STRANGER, learner]);
+    await db.query(
+      `insert into public.family_invites (family_id, code_hash, created_by, expires_at)
+       values ($1, 'kid', $2, now() + interval '1 day')`,
+      [family, PARENT_A]
+    );
+    await expectError(db.query(`select public.join_family($1, 'kid', '자녀')`, [STRANGER]), 'ACCOUNT_IS_LEARNER');
+    await expectError(db.query(`select public.create_family($1, 'x', 'y')`, [STRANGER]), 'ACCOUNT_IS_LEARNER');
+  });
+
+  it('로그인 아이디 형식과 중복을 막는다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await expect(db.query(`update public.learners set login_id = 'Bad-ID' where id = $1`, [learner])).rejects.toThrow();
+    await db.query(`update public.learners set login_id = 'jiwoo' where id = $1`, [learner]);
+    await expect(
+      db.query(`insert into public.learners (family_id, name, login_id) values ($1, '둘째', 'jiwoo')`, [family])
+    ).rejects.toThrow();
+  });
+});
+
 describe('create_test (regular)', () => {
   beforeEach(setup);
 

@@ -64,11 +64,9 @@ export default async function WordsPage() {
           <h1 className="text-2xl font-bold">📚 {learner.name}의 단어장</h1>
           <p className="mt-0.5 text-sm text-slate-500">모두 {words.length}개</p>
         </div>
-        {parentMode && (
-          <Link href="/words/new" className="btn-primary shrink-0">
-            ➕ 단어 등록
-          </Link>
-        )}
+        <Link href="/words/new" className="btn-primary shrink-0">
+          ➕ 단어 등록
+        </Link>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -82,17 +80,15 @@ export default async function WordsPage() {
         </p>
       )}
 
-      {!parentMode && <ParentLockNotice next="/words" what="단어 등록·수정" />}
+      {!parentMode && <ParentLockNotice next="/words" what="단어 수정·삭제" />}
 
       {groups.length === 0 ? (
         <div className="card text-center text-slate-500">
           <p className="text-4xl">📝</p>
           <p className="mt-2">아직 등록된 단어가 없어요.</p>
-          {parentMode && (
-            <Link href="/words/new" className="btn-primary mt-4">
-              첫 단어 등록하기
-            </Link>
-          )}
+          <Link href="/words/new" className="btn-primary mt-4">
+            첫 단어 등록하기
+          </Link>
         </div>
       ) : (
         <WordList groups={groups} parentMode={parentMode} />

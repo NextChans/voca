@@ -11,6 +11,7 @@ import {
   INVITE_TTL_MS,
   normalizeInviteCode,
 } from '@/lib/domain/invite';
+import { isValidLoginId, loginIdToEmail, MIN_KID_PASSWORD, normalizeLoginId } from '@/lib/domain/kidLogin';
 import { hashPin, isValidPin, verifyPin } from '@/lib/domain/parentToken';
 import { requireUser } from '@/lib/server/auth';
 import { requireLearner, requireMember, setSelectedLearner } from '@/lib/server/context';
@@ -110,6 +111,7 @@ export async function createInviteAction(): Promise<ActionState> {
 export async function unlockParentAction(_: ActionState, formData: FormData): Promise<ActionState> {
   const { user, member } = await requireMember();
   const result = await run(async () => {
+    if (member.role !== 'parent') return { error: '자녀 계정에서는 부모 모드를 켤 수 없어요.' };
     const pin = String(formData.get('pin') ?? '');
     const state = await repo.getPinState(member.family_id);
     if (!state.parent_pin_hash) return { message: '아직 PIN이 없어요. 아래에서 먼저 설정해 주세요.' };
@@ -150,6 +152,7 @@ export async function setPinAction(_: ActionState, formData: FormData): Promise<
 
 export async function selectLearnerAction(learnerId: string): Promise<void> {
   const { member } = await requireMember();
+  if (member.role === 'child') redirect('/'); // 자녀 계정은 본인 프로필 고정
   const learner = await repo.getLearner(member.family_id, uuid.parse(learnerId));
   if (!learner) redirect('/profiles');
   await setSelectedLearner(learner.id);
@@ -187,6 +190,47 @@ export async function updateLearnerAction(_: ActionState, formData: FormData): P
   });
 }
 
+// ================================================================ 자녀 로그인 계정 (부모 전용)
+
+const kidPasswordSchema = z
+  .string()
+  .min(MIN_KID_PASSWORD, `비밀번호는 ${MIN_KID_PASSWORD}자 이상으로 정해 주세요.`)
+  .max(72, '비밀번호가 너무 길어요.');
+
+export async function createLearnerLoginAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  return run(async () => {
+    const { member } = await parentCtx();
+    const learnerId = uuid.parse(formData.get('learnerId'));
+    const loginId = normalizeLoginId(String(formData.get('login_id') ?? ''));
+    if (!isValidLoginId(loginId)) return { error: '아이디는 영어 소문자·숫자·_ 로 3~20자예요.' };
+    const password = kidPasswordSchema.parse(formData.get('password'));
+    if (password !== String(formData.get('confirm') ?? '')) return { error: '두 비밀번호가 서로 달라요.' };
+    await repo.createLearnerLogin(member.family_id, learnerId, loginId, loginIdToEmail(loginId), password);
+    revalidatePath('/settings');
+    return { message: `아이디 "${loginId}"로 로그인할 수 있어요.` };
+  });
+}
+
+export async function resetLearnerPasswordAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  return run(async () => {
+    const { member } = await parentCtx();
+    const learnerId = uuid.parse(formData.get('learnerId'));
+    const password = kidPasswordSchema.parse(formData.get('password'));
+    if (password !== String(formData.get('confirm') ?? '')) return { error: '두 비밀번호가 서로 달라요.' };
+    await repo.resetLearnerPassword(member.family_id, learnerId, password);
+    return { message: '비밀번호를 바꿨어요.' };
+  });
+}
+
+export async function removeLearnerLoginAction(learnerId: string): Promise<ActionState> {
+  return run(async () => {
+    const { member } = await parentCtx();
+    await repo.removeLearnerLogin(member.family_id, uuid.parse(learnerId));
+    revalidatePath('/settings');
+    return { message: '로그인 계정을 삭제했어요. (단어와 시험 기록은 그대로예요)' };
+  });
+}
+
 // ================================================================ 단어 (현재 선택된 자녀)
 
 const addWordsSchema = z
@@ -194,10 +238,10 @@ const addWordsSchema = z
   .min(1, '저장할 단어가 없어요.')
   .max(300, '한 번에 300개까지 저장할 수 있어요.');
 
+/** 단어 추가는 자녀 모드에서도 허용 (수정·삭제는 부모 전용). 등록 당일엔 출제되지 않으므로 시험 공정성에는 영향 없음. */
 export async function addWordsAction(rows: { term: string; meaning: string }[]): Promise<ActionState> {
   return run(async () => {
     const { user, member, learner } = await requireLearner();
-    await requireParent(user.id, member.family_id);
     const { added, skipped } = await repo.addWords(
       member.family_id,
       learner.id,

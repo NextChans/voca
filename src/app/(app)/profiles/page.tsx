@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { selectLearnerAction } from '@/app/actions';
 import { ParentLockNotice } from '@/components/ParentLockNotice';
 import { getSelectedLearner, requireMember } from '@/lib/server/context';
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: '누가 공부하나요?' };
 
 export default async function ProfilesPage() {
   const { user, member } = await requireMember();
+  if (member.role === 'child') redirect('/'); // 자녀 계정은 본인 프로필 고정
   const familyId = member.family_id;
   const [learners, selected, parentMode] = await Promise.all([
     repo.listLearners(familyId),
