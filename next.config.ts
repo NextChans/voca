@@ -2,6 +2,15 @@ import type { NextConfig } from 'next';
 
 const isDev = process.env.NODE_ENV === 'development';
 
+// 브라우저는 Supabase Auth 엔드포인트만 호출한다 (로컬/커스텀 도메인 대응)
+const supabaseOrigin = (() => {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin;
+  } catch {
+    return 'https://*.supabase.co';
+  }
+})();
+
 // Tesseract.js(브라우저 OCR)는 jsDelivr에서 워커·WASM·언어데이터를 받아오므로 해당 출처만 추가 허용한다.
 const csp = [
   "default-src 'self'",
@@ -11,7 +20,7 @@ const csp = [
   "media-src 'self' blob:",
   "font-src 'self'",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co https://cdn.jsdelivr.net",
+  `connect-src 'self' ${supabaseOrigin} https://cdn.jsdelivr.net`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
