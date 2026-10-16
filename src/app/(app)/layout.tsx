@@ -8,6 +8,7 @@ const NAV = [
   { href: '/', label: '홈', icon: '🏠' },
   { href: '/words', label: '단어', icon: '📚' },
   { href: '/test/new', label: '시험', icon: '✏️' },
+  { href: '/practice', label: '연습', icon: '🔁' },
   { href: '/results', label: '기록', icon: '📊' },
   { href: '/settings', label: '설정', icon: '⚙️' },
 ];
@@ -60,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <ul className="mx-auto flex max-w-3xl justify-around">
           {NAV.map((n) => (
             <li key={n.href}>
-              <Link href={n.href} className="flex flex-col items-center px-4 py-2 text-xs text-slate-600">
+              <Link href={n.href} className="flex flex-col items-center px-2 py-2 text-xs text-slate-600 sm:px-4">
                 <span className="text-xl">{n.icon}</span>
                 {n.label}
               </Link>

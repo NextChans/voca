@@ -1,5 +1,6 @@
 'use client';
 
+import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
 import { useEffect, useRef } from 'react';
 import { MAX_ROWS, rowIssue, type EditRow } from './rows';
 
@@ -75,12 +76,9 @@ export function WordTable({ rows, duplicates, onChange, onRemove, onAdd }: Props
                   placeholder="apple"
                   aria-label={`${i + 1}번 영어 단어`}
                   aria-invalid={termBad || undefined}
-                  autoCapitalize="off"
-                  autoCorrect="off"
+                  {...englishInputProps}
                   autoComplete="off"
-                  spellCheck={false}
                   enterKeyHint="next"
-                  lang="en"
                   maxLength={100}
                 />
                 <input
@@ -94,6 +92,7 @@ export function WordTable({ rows, duplicates, onChange, onRemove, onAdd }: Props
                   placeholder="사과"
                   aria-label={`${i + 1}번 뜻`}
                   aria-invalid={meaningBad || undefined}
+                  {...koreanInputProps}
                   autoComplete="off"
                   enterKeyHint="next"
                   maxLength={200}

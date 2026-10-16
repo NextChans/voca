@@ -1,5 +1,6 @@
 'use client';
 
+import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { deleteWordAction, updateWordAction } from '@/app/actions';
@@ -58,9 +59,7 @@ export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             aria-label="영어 단어"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
+            {...englishInputProps}
             maxLength={100}
             autoFocus
           />
@@ -72,6 +71,7 @@ export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask
               if (e.key === 'Enter' && !e.nativeEvent.isComposing) save();
             }}
             aria-label="뜻"
+            {...koreanInputProps}
             maxLength={200}
           />
         </div>

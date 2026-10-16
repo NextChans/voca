@@ -106,6 +106,9 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
           <RetestButton testId={id} className="btn-primary mt-3 h-14 w-full bg-violet-600 text-lg hover:bg-violet-700">
             🔁 틀린 {wrong}개 재시험 보기
           </RetestButton>
+          <Link href="/practice" className="mt-2 block text-sm font-semibold text-violet-700 underline">
+            먼저 오답 연습으로 복습하기 →
+          </Link>
         </section>
       )}
 

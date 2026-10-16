@@ -99,6 +99,18 @@ export default async function HomePage() {
         <StatusBox status={status} />
       </section>
 
+      <Link
+        href="/practice"
+        className="card flex items-center gap-3 border-emerald-200 bg-emerald-50 transition hover:bg-emerald-100"
+      >
+        <span className="text-3xl">🔁</span>
+        <span className="flex-1">
+          <span className="block font-bold text-emerald-900">오답 연습</span>
+          <span className="block text-sm text-emerald-800">틀렸던 단어를 카드·쓰기로 마음껏 연습해요 (점수에 안 들어가요)</span>
+        </span>
+        <span className="text-emerald-700">→</span>
+      </Link>
+
       <section className="card" aria-labelledby="recent-title">
         <div className="mb-3 flex items-center justify-between">
           <h2 id="recent-title" className="text-lg font-bold">
