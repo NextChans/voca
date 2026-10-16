@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { lockParentAction } from '@/app/actions';
 import { getSelectedLearner, requireMember } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
+import { getPinState } from '@/lib/server/repo';
 
 const NAV = [
   { href: '/', label: '홈', icon: '🏠' },
@@ -13,9 +14,10 @@ const NAV = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, member } = await requireMember();
-  const [learner, parentMode] = await Promise.all([
+  const [learner, parentMode, pin] = await Promise.all([
     getSelectedLearner(member.family_id),
     isParentMode(user.id, member.family_id),
+    getPinState(member.family_id),
   ]);
 
   return (
@@ -26,7 +28,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="font-bold">{learner?.name ?? '자녀 선택'}</span>
           <span className="text-xs text-slate-400">바꾸기</span>
         </Link>
-        {parentMode ? (
+        {!pin.parent_pin_hash ? (
+          <Link href="/settings" className="badge bg-rose-100 px-3 py-1 text-rose-700">
+            ⚠️ 부모 PIN 설정 필요
+          </Link>
+        ) : parentMode ? (
           <form action={lockParentAction}>
             <button className="badge bg-amber-100 px-3 py-1 text-amber-800" title="눌러서 부모 모드 잠그기">
               🔓 부모 모드 · {member.display_name}

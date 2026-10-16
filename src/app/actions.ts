@@ -9,6 +9,7 @@ import {
   generateInviteCode,
   hashInviteCode,
   INVITE_TTL_MS,
+  normalizeInviteCode,
 } from '@/lib/domain/invite';
 import { hashPin, isValidPin, verifyPin } from '@/lib/domain/parentToken';
 import { requireUser } from '@/lib/server/auth';
@@ -84,7 +85,8 @@ export async function createFamilyAction(_: ActionState, formData: FormData): Pr
 export async function joinFamilyAction(_: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireUser();
   const result = await run(async () => {
-    const code = z.string().trim().min(8, '초대코드 8자리를 입력해 주세요.').parse(formData.get('code'));
+    const code = normalizeInviteCode(String(formData.get('code') ?? ''));
+    if (code.length !== 8) return { error: '초대코드 8자리를 입력해 주세요.' };
     await repo.joinFamily(user.id, hashInviteCode(code), personNameSchema.parse(formData.get('display_name')));
   });
   if (result.error) return result;
@@ -295,6 +297,6 @@ export async function cancelTestAction(testId: string): Promise<ActionState> {
     const { user, member } = await parentCtx();
     await repo.cancelTest(member.family_id, user.id, uuid.parse(testId));
     revalidatePath('/', 'layout');
-    return { message: '진행 중이던 시험을 취소했어요. (이번 주 횟수에서 빠지고, 단어는 다시 출제 대상이 돼요)' };
+    return { message: '진행 중이던 시험을 취소했어요.' };
   });
 }

@@ -19,5 +19,5 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(new URL(next, origin));
     console.error('[auth/callback] exchangeCodeForSession failed', error.message);
   }
-  return NextResponse.redirect(new URL('/login', origin));
+  return NextResponse.redirect(new URL('/login?error=link', origin));
 }

@@ -83,7 +83,7 @@ function Runner({ testId, questions, title }: Props) {
   const q = questions[index];
   const isSpelling = q.direction === 'spelling';
   const answeredCount = questions.reduce((n, x) => n + (isBlank(answers[x.id]) ? 0 : 1), 0);
-  const blankNumbers = questions.filter((x) => isBlank(answers[x.id])).map((x) => questions.indexOf(x) + 1);
+  const blankNumbers = questions.flatMap((x, i) => (isBlank(answers[x.id]) ? [i + 1] : []));
 
   // 문제가 바뀌면 입력칸에 포커스 + (사용자가 한 번이라도 조작한 뒤라면) 철자 문제 발음 자동 재생
   useEffect(() => {
