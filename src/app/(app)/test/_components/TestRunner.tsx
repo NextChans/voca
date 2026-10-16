@@ -80,7 +80,7 @@ function Runner({ testId, questions, title }: Props) {
   const interactedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const q = questions[index];
+  const q = questions[index]!; // index 는 항상 0..total-1, total > 0
   const isSpelling = q.direction === 'spelling';
   const answeredCount = questions.reduce((n, x) => n + (isBlank(answers[x.id]) ? 0 : 1), 0);
   const blankNumbers = questions.flatMap((x, i) => (isBlank(answers[x.id]) ? [i + 1] : []));

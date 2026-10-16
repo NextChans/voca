@@ -111,22 +111,22 @@ describe('parseWordList', () => {
     expect(parseWordList('hello world\nfoo bar baz')).toEqual([]);
   });
   // BUG: 명시적 구분자(: = | - TAB)가 있으면 양쪽 모두 한글이 없어도 단어로 받아들인다 (OCR 머리글 "Name: ____" 등).
-  it.fails('ignores lines with no Korean even with an explicit separator', () => {
+  it('ignores lines with no Korean even with an explicit separator', () => {
     expect(parseWordList('Unit: Animals\nName: ____\napple: banana')).toEqual([]);
   });
   // BUG: NFKC 가 ① → "1" 로 바꾼 뒤 번호 제거가 돌아 term 이 "1apple" 이 되어 줄 전체가 버려진다.
-  it.fails('strips circled numbers "① apple 사과"', () => {
+  it('strips circled numbers "① apple 사과"', () => {
     expect(parseWordList('① apple 사과\n② banana 바나나')).toEqual([
       { term: 'apple', meaning: '사과' },
       { term: 'banana', meaning: '바나나' },
     ]);
   });
   // BUG: 단어장에 흔한 "be good at ~을 잘하다" 형태에서 물결이 term 쪽에 붙어 term 검증에 실패 → 줄 전체가 버려진다.
-  it.fails('keeps tilde with the meaning: "be good at ~을 잘하다"', () => {
+  it('keeps tilde with the meaning: "be good at ~을 잘하다"', () => {
     expect(parseWordList('be good at ~을 잘하다')).toEqual([{ term: 'be good at', meaning: '~을 잘하다' }]);
   });
   // BUG: 뜻 안의 콜론(예: ...)이 명시적 구분자로 오인돼 term 이 "apple 사과 (예" 가 되고 줄 전체가 버려진다.
-  it.fails('a colon inside the meaning does not break parsing', () => {
+  it('a colon inside the meaning does not break parsing', () => {
     expect(parseWordList('apple 사과 (예: 빨간 사과)')).toEqual([{ term: 'apple', meaning: '사과 (예: 빨간 사과)' }]);
   });
   it('returns [] for empty input', () => {

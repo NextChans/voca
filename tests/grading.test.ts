@@ -103,7 +103,7 @@ describe('normalizeMeaning', () => {
     expect(normalizeMeaning('10대')).toBe('10대');
   });
   // BUG: NFKC 가 ① 을 "1" 로 바꾼 뒤에 번호 제거 정규식이 돌기 때문에 [①-⑳] 분기가 절대 매칭되지 않는다.
-  it.fails('removes a leading circled number (①)', () => {
+  it('removes a leading circled number (①)', () => {
     expect(normalizeMeaning('① 사과')).toBe('사과');
   });
 });
@@ -201,7 +201,7 @@ describe('gradeMeaning', () => {
     expect(gradeMeaning('사과, 능금', '사과 능금')).toBe(false);
   });
   // BUG: 원문자 번호(①②)가 붙은 등록 뜻은 NFKC 후 "1사과" 가 되어 "사과" 를 정답으로 인정하지 못한다.
-  it.fails('handles circled-number meanings "① 사과, ② 능금"', () => {
+  it('handles circled-number meanings "① 사과, ② 능금"', () => {
     expect(gradeMeaning('① 사과, ② 능금', '사과')).toBe(true);
   });
 });

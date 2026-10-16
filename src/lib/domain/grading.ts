@@ -48,9 +48,10 @@ function stripBrackets(s: string): string {
 
 export function normalizeMeaning(input: string): string {
   return input
+    .replace(/^\s*[①-⑳]\s*/u, '') // NFKC 가 ①→1 로 바꾸기 전에 제거
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/^\s*(\d+[.)]|[①-⑳])\s*/u, '')
+    .replace(/^\s*\d+[.)]\s*/u, '')
     .replace(/[~∼〜]/g, '')
     .replace(/[^\p{L}\p{N}]/gu, '');
 }
