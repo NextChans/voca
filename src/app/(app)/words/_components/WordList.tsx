@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
+import { deleteWordsAction } from '@/app/actions';
 import { WordRow } from './WordRow';
 
 export interface WordItem {
@@ -48,6 +50,41 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
     setMaskVersion((v) => v + 1);
   };
 
+  // 여러 개 선택해서 지우기 (부모 모드 전용)
+  const router = useRouter();
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const toggle = (ids: string[], on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+
+  const exitSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  const removeSelected = () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`선택한 단어 ${ids.length}개를 지울까요?\n시험 기록의 해당 문항은 그대로 남아요.`)) return;
+    startTransition(async () => {
+      const res = await deleteWordsAction(ids);
+      if (res.error) return setNotice({ ok: false, text: res.error });
+      setNotice({ ok: true, text: res.message ?? '지웠어요.' });
+      exitSelecting();
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="sticky top-[57px] z-[5] -mx-4 bg-slate-50/95 px-4 py-2 backdrop-blur">
@@ -72,24 +109,95 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
         )}
       </div>
 
+      {parentMode && (
+        <div className="flex items-center justify-end gap-2">
+          {notice && (
+            <p role="status" className={`flex-1 text-sm ${notice.ok ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {notice.text}
+            </p>
+          )}
+          <button
+            type="button"
+            className={selecting ? 'btn-secondary' : 'btn-ghost'}
+            onClick={() => {
+              setNotice(null);
+              if (selecting) exitSelecting();
+              else setSelecting(true);
+            }}
+            disabled={pending}
+          >
+            {selecting ? '선택 끝내기' : '☑️ 여러 개 지우기'}
+          </button>
+        </div>
+      )}
+
       {groups.map((g) => {
         const badge = groupBadge(g);
+        const ids = g.words.map((w) => w.id);
+        const allOn = ids.every((id) => selected.has(id));
         return (
           <section key={g.date} className="card p-0">
             <header className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-              <h2 className="font-bold text-slate-700">
-                {g.label} 등록 · {g.words.length}개
-              </h2>
+              {selecting ? (
+                <label className="flex cursor-pointer items-center gap-2 font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={allOn}
+                    onChange={() => toggle(ids, !allOn)}
+                    className="h-5 w-5 accent-rose-600"
+                  />
+                  {g.label} 등록 · {g.words.length}개 모두 선택
+                </label>
+              ) : (
+                <h2 className="font-bold text-slate-700">
+                  {g.label} 등록 · {g.words.length}개
+                </h2>
+              )}
               <span className={`badge ${badge.tone}`}>{badge.text}</span>
             </header>
             <ul className="divide-y divide-slate-100">
               {g.words.map((w) => (
-                <WordRow key={`${w.id}-${maskVersion}`} word={w} mask={mask} parentMode={parentMode} />
+                <WordRow
+                  key={`${w.id}-${maskVersion}`}
+                  word={w}
+                  mask={mask}
+                  parentMode={parentMode}
+                  selection={
+                    selecting
+                      ? { selected: selected.has(w.id), onToggle: () => toggle([w.id], !selected.has(w.id)) }
+                      : undefined
+                  }
+                />
               ))}
             </ul>
           </section>
         );
       })}
+
+      {selecting && <div aria-hidden className="h-16" />}
+      {selecting && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 px-4">
+          <div className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-lg">
+            <span className="flex-1 text-sm font-semibold">{selected.size}개 선택</span>
+            <button
+              type="button"
+              className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              onClick={() => setSelected(new Set())}
+              disabled={pending || selected.size === 0}
+            >
+              선택 해제
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold hover:bg-rose-500 disabled:opacity-40"
+              onClick={removeSelected}
+              disabled={pending || selected.size === 0}
+            >
+              {pending ? '지우는 중…' : `🗑️ ${selected.size}개 지우기`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPracticeWords, type PracticeResultRow } from '@/lib/domain/practice';
+import { buildNewWords, buildPracticeWords, type PracticeResultRow } from '@/lib/domain/practice';
 
 const row = (term: string, ok: boolean | null, at: string, meaning = '뜻'): PracticeResultRow => ({
   word_id: null,
@@ -42,5 +42,37 @@ describe('buildPracticeWords', () => {
       row('dog', false, '2026-10-01', '개'),
     ]);
     expect(words[0]?.meaning).toBe('개, 강아지');
+  });
+});
+
+describe('buildNewWords', () => {
+  const w = (id: string, created_at: string) => ({ id, term: `t-${id}`, meaning: `m-${id}`, created_at });
+  // 2026-10-17 00:30 KST
+  const now = new Date('2026-10-16T15:30:00Z');
+
+  it('이미 정기 시험에 나온 단어는 빼고 등록 순서를 유지한다', () => {
+    const words = [w('a', '2026-10-10T01:00:00Z'), w('b', '2026-10-11T01:00:00Z'), w('c', '2026-10-12T01:00:00Z')];
+    const out = buildNewWords(words, new Set(['b']), now);
+    expect(out.map((x) => x.key)).toEqual(['a', 'c']);
+    expect(out[0]).toMatchObject({ term: 't-a', meaning: 'm-a', registeredDate: '2026-10-10' });
+  });
+
+  it('오늘 등록 여부는 KST 자정 기준이다', () => {
+    const out = buildNewWords(
+      [
+        w('before', '2026-10-16T14:59:59Z'), // 10/16 23:59:59 KST
+        w('after', '2026-10-16T15:00:00Z'), // 10/17 00:00 KST
+      ],
+      new Set(),
+      now
+    );
+    expect(out).toEqual([
+      expect.objectContaining({ key: 'before', registeredToday: false, registeredDate: '2026-10-16' }),
+      expect.objectContaining({ key: 'after', registeredToday: true, registeredDate: '2026-10-17' }),
+    ]);
+  });
+
+  it('모두 시험에 나왔으면 빈 배열', () => {
+    expect(buildNewWords([w('a', '2026-10-10T01:00:00Z')], new Set(['a']), now)).toEqual([]);
   });
 });

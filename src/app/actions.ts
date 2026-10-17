@@ -268,11 +268,17 @@ export async function updateWordAction(wordId: string, term: string, meaning: st
   });
 }
 
-export async function deleteWordAction(wordId: string): Promise<ActionState> {
+const deleteWordsSchema = z.array(uuid).min(1, '지울 단어를 골라 주세요.').max(500, '한 번에 500개까지 지울 수 있어요.');
+
+/** 단어 삭제(1개 이상). 부모 모드 전용. 시험 기록의 문항은 스냅샷이라 그대로 남는다. */
+export async function deleteWordsAction(wordIds: string[]): Promise<ActionState> {
   return run(async () => {
-    const { member } = await parentCtx();
-    await repo.deleteWord(member.family_id, uuid.parse(wordId));
+    const { user, member } = await parentCtx();
+    const ids = [...new Set(deleteWordsSchema.parse(wordIds))];
+    const deleted = await repo.deleteWords(member.family_id, ids);
+    console.info('[words] delete', { family: member.family_id, by: user.id, requested: ids.length, deleted });
     revalidatePath('/', 'layout');
+    return { message: `${deleted}개 지웠어요.` };
   });
 }
 

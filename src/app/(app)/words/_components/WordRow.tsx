@@ -3,13 +3,24 @@
 import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { deleteWordAction, updateWordAction } from '@/app/actions';
+import { deleteWordsAction, updateWordAction } from '@/app/actions';
 import { SpeakButton } from '@/components/SpeakButton';
 import type { Mask, WordItem } from './WordList';
 
 const TERM = /^[a-z][a-z\s'’\-./]*$/i;
 
-export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask; parentMode: boolean }) {
+export function WordRow({
+  word,
+  mask,
+  parentMode,
+  selection,
+}: {
+  word: WordItem;
+  mask: Mask;
+  parentMode: boolean;
+  /** 여러 개 선택 모드일 때만 전달 */
+  selection?: { selected: boolean; onToggle: () => void };
+}) {
   const router = useRouter();
   const [revealed, setRevealed] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -44,7 +55,7 @@ export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask
   const remove = () => {
     if (!window.confirm(`'${word.term}' 단어를 지울까요?\n시험 기록의 해당 문항은 그대로 남아요.`)) return;
     startTransition(async () => {
-      const res = await deleteWordAction(word.id);
+      const res = await deleteWordsAction([word.id]);
       if (res.error) return setError(res.error);
       router.refresh();
     });
@@ -89,7 +100,20 @@ export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask
   }
 
   return (
-    <li className={`flex items-center gap-2 px-4 py-2.5 ${pending ? 'opacity-50' : ''}`}>
+    <li
+      className={`flex items-center gap-2 px-4 py-2.5 ${pending ? 'opacity-50' : ''} ${
+        selection?.selected ? 'bg-rose-50' : ''
+      }`}
+    >
+      {selection && (
+        <input
+          type="checkbox"
+          checked={selection.selected}
+          onChange={selection.onToggle}
+          className="h-5 w-5 shrink-0 accent-rose-600"
+          aria-label={`${word.term} 선택`}
+        />
+      )}
       <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-x-3 gap-y-0.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex min-w-0 items-center gap-1">
           {hideTerm ? (
@@ -120,7 +144,7 @@ export function WordRow({ word, mask, parentMode }: { word: WordItem; mask: Mask
         {word.wrong > 0 && <span className="badge bg-rose-50 text-rose-600">틀림 {word.wrong}회</span>}
       </div>
 
-      {parentMode && (
+      {parentMode && !selection && (
         <div className="flex shrink-0 gap-0.5">
           <button
             type="button"
