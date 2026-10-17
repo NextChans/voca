@@ -408,9 +408,23 @@ export async function updateWord(
   if (error) fail(error, 'updateWord');
 }
 
-export async function deleteWord(familyId: string, wordId: string): Promise<void> {
-  const { error } = await db().from('words').delete().eq('family_id', familyId).eq('id', wordId);
-  if (error) fail(error, 'deleteWord');
+/**
+ * 여러 단어 삭제. 실제로 지운 개수를 돌려준다.
+ * id 목록이 URL 쿼리로 가므로 100개씩 나눠 보낸다(묶음 사이 원자성은 없지만 재시도해도 안전).
+ */
+export async function deleteWords(familyId: string, wordIds: readonly string[]): Promise<number> {
+  let deleted = 0;
+  for (let i = 0; i < wordIds.length; i += 100) {
+    const { data, error } = await db()
+      .from('words')
+      .delete()
+      .eq('family_id', familyId)
+      .in('id', wordIds.slice(i, i + 100))
+      .select('id');
+    if (error) fail(error, 'deleteWords');
+    deleted += data?.length ?? 0;
+  }
+  return deleted;
 }
 
 export async function listWordStats(

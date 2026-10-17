@@ -105,8 +105,10 @@ export default async function HomePage() {
       >
         <span className="text-3xl">🔁</span>
         <span className="flex-1">
-          <span className="block font-bold text-emerald-900">오답 연습</span>
-          <span className="block text-sm text-emerald-800">틀렸던 단어를 카드·쓰기로 마음껏 연습해요 (점수에 안 들어가요)</span>
+          <span className="block font-bold text-emerald-900">연습하기</span>
+          <span className="block text-sm text-emerald-800">
+            틀린 단어·새로 등록한 단어를 카드·쓰기로 연습해요 (점수에 안 들어가요)
+          </span>
         </span>
         <span className="text-emerald-700">→</span>
       </Link>

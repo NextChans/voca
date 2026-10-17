@@ -194,6 +194,36 @@ async function main() {
   const testsBefore = (await db.query(`select count(*)::int c from public.tests`)).rows[0].c;
   log('오답 연습: 카드 모드 완주 + 뜻 쓰기 즉시 채점', `(시험 수 ${testsBefore}, 연습은 기록 안 함)`);
 
+  // 9-2. 새 단어 연습: 오늘 등록한 단어만 '오늘 등록' 범위에, 출제된 단어는 제외
+  await db.query(
+    `insert into public.words (family_id, learner_id, term, meaning)
+     select family_id, learner_id, t, '오늘' || t from public.words, unnest(array['todaya','todayb','todayc']) t
+      where term = 'apple'`
+  );
+  await dad.goto(`${BASE}/practice?tab=new`);
+  await dad.getByText(/오늘 등록한 단어/).first().waitFor();
+  await shot(dad, 'practice-new');
+  const newStart = await dad.getByRole('button', { name: /연습 시작 \(\d+개\)/ }).textContent();
+  if (!/\(3개\)/.test(newStart)) throw new Error(`새 단어(오늘) 범위 이상: ${newStart}`);
+  await dad.getByRole('button', { name: /연습 시작/ }).click();
+  for (let i = 0; i < 3; i++) await dad.getByRole('button', { name: /알아요/ }).click();
+  await dad.getByText('연습 끝! 모두 맞혔어요').waitFor();
+  log('새 단어 연습: 오늘 등록 3개 완주');
+
+  // 9-3. 여러 개 선택 삭제 (부모 모드)
+  await dad.goto(`${BASE}/words`);
+  await dad.getByRole('button', { name: /여러 개 지우기/ }).click();
+  await dad.getByLabel('todaya 선택').check();
+  await dad.getByLabel('todayb 선택').check();
+  await shot(dad, 'words-multi-select');
+  dad.once('dialog', (d) => d.accept());
+  await dad.getByRole('button', { name: /2개 지우기/ }).click();
+  await dad.getByText('2개 지웠어요.').waitFor();
+  const left = (await db.query(`select term from public.words where term like 'today%' order by term`)).rows.map((r) => r.term);
+  if (left.join() !== 'todayc') throw new Error(`선택 삭제 이상: ${left.join()}`);
+  log('여러 개 선택 삭제', '2개 삭제, 1개 남음');
+  await db.query(`delete from public.words where term = 'todayc'`);
+
   // 10. 재시험 (틀린 4개)
   await dad.goto(`${BASE}/results/${testId}`);
   await dad.getByRole('button', { name: /재시험/ }).first().click();

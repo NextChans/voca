@@ -1,3 +1,5 @@
+import { kstDate } from './week';
+
 /**
  * 오답 연습 대상 집계 (순수 함수)
  * 입력: 제출된 시험의 문항 결과들 (부모 정정 반영된 is_correct)
@@ -68,4 +70,46 @@ export function buildPracticeWords(rows: readonly PracticeResultRow[]): Practice
         b.wrongCount - a.wrongCount ||
         (b.lastWrongAt ?? '').localeCompare(a.lastWrongAt ?? '')
     );
+}
+
+/** 새 단어 연습 대상 (아직 정기 시험에 안 나온 단어) */
+export interface NewWordInput {
+  id: string;
+  term: string;
+  meaning: string;
+  created_at: string;
+}
+
+export interface NewPracticeWord {
+  key: string;
+  term: string;
+  meaning: string;
+  /** KST 기준 오늘 등록했는지 */
+  registeredToday: boolean;
+  /** KST 등록일 YYYY-MM-DD */
+  registeredDate: string;
+}
+
+/**
+ * 정기 시험(취소 제외, 진행 중 포함)에 한 번도 안 나온 단어를 등록 순서대로 돌려준다.
+ * 진행 중 시험 문항을 빼야 연습으로 정답이 새지 않는다.
+ */
+export function buildNewWords(
+  words: readonly NewWordInput[],
+  testedIds: ReadonlySet<string>,
+  now: Date
+): NewPracticeWord[] {
+  const today = kstDate(now);
+  return words
+    .filter((w) => !testedIds.has(w.id))
+    .map((w) => {
+      const registeredDate = kstDate(w.created_at);
+      return {
+        key: w.id,
+        term: w.term,
+        meaning: w.meaning,
+        registeredToday: registeredDate === today,
+        registeredDate,
+      };
+    });
 }

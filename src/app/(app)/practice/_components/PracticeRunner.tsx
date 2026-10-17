@@ -9,11 +9,17 @@ export interface PracticeCardWord {
   key: string;
   term: string;
   meaning: string;
-  wrongCount: number;
-  lastWrong: boolean;
+  /** "목록 보기"에 붙는 꼬리표 (예: '2번 틀림', '오늘') */
+  badge?: { text: string; tone: string };
 }
 
-type Scope = 'recent' | 'all';
+export interface PracticeScope {
+  key: string;
+  title: string;
+  desc: string;
+  words: PracticeCardWord[];
+}
+
 type Mode = 'card' | 'spelling' | 'meaning';
 
 const MODES: { value: Mode; label: string; desc: string; icon: string }[] = [
@@ -31,16 +37,25 @@ function shuffle<T>(arr: readonly T[]): T[] {
   return a;
 }
 
-export function PracticeRunner({ words }: { words: PracticeCardWord[] }) {
-  const recentCount = words.filter((w) => w.lastWrong).length;
-  const [scope, setScope] = useState<Scope>(recentCount > 0 ? 'recent' : 'all');
+/**
+ * 연습 화면 (오답 연습 · 새 단어 연습 공용).
+ * scopes: 고를 수 있는 단어 묶음. 단어가 0개인 묶음은 비활성. 처음엔 단어가 있는 첫 묶음을 고른다.
+ * listWords: "목록 보기"에 보여 줄 단어 (보통 가장 넓은 묶음)
+ */
+export function PracticeRunner({
+  scopes,
+  listWords,
+  listTitle,
+}: {
+  scopes: PracticeScope[];
+  listWords: PracticeCardWord[];
+  listTitle: string;
+}) {
+  const [scopeKey, setScopeKey] = useState(() => (scopes.find((s) => s.words.length > 0) ?? scopes[0])?.key);
   const [mode, setMode] = useState<Mode>('card');
   const [session, setSession] = useState<null | { id: number; queue: PracticeCardWord[]; total: number }>(null);
 
-  const pool = useMemo(
-    () => (scope === 'recent' ? words.filter((w) => w.lastWrong) : words),
-    [scope, words]
-  );
+  const pool = useMemo(() => scopes.find((s) => s.key === scopeKey)?.words ?? [], [scopes, scopeKey]);
 
   if (session) {
     return (
@@ -59,19 +74,16 @@ export function PracticeRunner({ words }: { words: PracticeCardWord[] }) {
       <section className="card space-y-3">
         <h2 className="font-bold">어떤 단어를 연습할까요?</h2>
         <div className="grid grid-cols-2 gap-2">
-          <ScopeButton
-            active={scope === 'recent'}
-            disabled={recentCount === 0}
-            onClick={() => setScope('recent')}
-            title="최근에 틀린 단어"
-            desc={`마지막 시험에서 틀린 ${recentCount}개`}
-          />
-          <ScopeButton
-            active={scope === 'all'}
-            onClick={() => setScope('all')}
-            title="한 번이라도 틀린 단어"
-            desc={`모두 ${words.length}개`}
-          />
+          {scopes.map((s) => (
+            <ScopeButton
+              key={s.key}
+              active={scopeKey === s.key}
+              disabled={s.words.length === 0}
+              onClick={() => setScopeKey(s.key)}
+              title={s.title}
+              desc={s.desc}
+            />
+          ))}
         </div>
       </section>
 
@@ -106,16 +118,14 @@ export function PracticeRunner({ words }: { words: PracticeCardWord[] }) {
       </button>
 
       <details className="card">
-        <summary className="cursor-pointer font-semibold">틀린 단어 목록 보기</summary>
+        <summary className="cursor-pointer font-semibold">{listTitle}</summary>
         <ul className="mt-3 divide-y divide-slate-100 text-sm">
-          {words.map((w) => (
+          {listWords.map((w) => (
             <li key={w.key} className="flex items-center gap-2 py-2">
               <SpeakButton text={w.term} />
               <span className="font-semibold">{w.term}</span>
               <span className="flex-1 text-slate-500">{w.meaning}</span>
-              <span className={`badge ${w.lastWrong ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                {w.wrongCount}번 틀림
-              </span>
+              {w.badge && <span className={`badge ${w.badge.tone}`}>{w.badge.text}</span>}
             </li>
           ))}
         </ul>
