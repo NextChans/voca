@@ -7,7 +7,8 @@
 | 서비스 URL | https://voca-pink.vercel.app |
 | 호스팅 | Vercel (GitHub `NextChans/voca` main 브랜치 자동 배포, `vercel.json`: framework nextjs, region icn1) |
 | DB/Auth | Supabase 프로젝트 ref `juyduseodcrqfinsnqll` (`https://juyduseodcrqfinsnqll.supabase.co`) |
-| 사진 인식 | Gemini (`GEMINI_API_KEY`, 무료 등급) |
+| 사진 인식 | Gemini (`GEMINI_API_KEY`). Google Cloud 프로젝트에 결제 연결됨(2026-10-18) → 유료 등급(사진이 Google 학습에 쓰이지 않음, 소액 과금) |
+| 발음 | Google Cloud TTS (`GOOGLE_TTS_API_KEY`, 음성 `en-US-Neural2-F`), 운영 적용 확인(2026-10-18). Cloud 프로젝트 할당량 All requests per minute = 60 |
 | CI | GitHub Actions `.github/workflows/ci.yml` (PR·main push: typecheck → lint → test → build) |
 
 > 키 값은 Vercel 환경변수에만 있습니다. 문서·코드·채팅에 비밀 키를 남기지 마세요.
@@ -23,7 +24,7 @@
 | `GEMINI_API_KEY` | Secret | 권장 | Google AI Studio 발급. 무료 등급은 입력 데이터가 Google 서비스 개선에 쓰일 수 있음 |
 | `GEMINI_MODEL` | Config | 선택 | 기본 `gemini-3.5-flash-lite` |
 | `ANTHROPIC_API_KEY` | Secret | 선택 | Gemini 키가 없을 때만 사용 |
-| `GOOGLE_TTS_API_KEY` | Secret | 선택 | 없으면 비공식 Google Translate TTS 폴백 |
+| `GOOGLE_TTS_API_KEY` | Secret | 권장(설정됨) | Cloud Text-to-Speech API로만 제한한 키. 설정 시 Cloud TTS만 사용(실패해도 비공식 폴백 없음 → `[api/tts] synthesis failed` 로그 + 502). 없으면 비공식 Google Translate TTS |
 
 Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 반영됩니다.
 
@@ -68,6 +69,7 @@ curl -s "https://juyduseodcrqfinsnqll.supabase.co/rest/v1/words?select=id&limit=
 | 사진 탭에 "기기 내 글자 인식만 켜져 있어요" 경고 | `GEMINI_API_KEY`/`ANTHROPIC_API_KEY` 미설정 또는 Redeploy 안 함 |
 | 자녀가 시험 시작 불가 | 홈/시험 화면에 이유 표시: 주간 횟수 소진, 출제 대상 < 50, 진행 중 시험 존재(부모가 설정에서 취소 가능) |
 | 부모 PIN 분실 | SQL Editor: `update families set parent_pin_hash = null where id = '<family id>';` → 앱 설정에서 새 PIN 설정 |
+| 발음 버튼 ⚠️ / `/api/tts` 502 | Vercel Logs `[api/tts]` 확인. 403: TTS API 사용 설정·키 제한, 429: Cloud 할당량(분당 60), 400: 음성 이름 |
 | 자녀 비밀번호 분실 | 부모 모드 → 설정 → 자녀별 설정 → 비밀번호 바꾸기 |
 
 ## 로컬 개발 / 검증
