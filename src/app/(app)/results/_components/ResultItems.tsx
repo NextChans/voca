@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { overrideItemAction } from '@/app/actions';
 import { SpeakButton } from '@/components/SpeakButton';
 
@@ -61,7 +60,6 @@ export function ResultItems({ items, parentMode }: { items: ResultItem[]; parent
 }
 
 function ItemRow({ item, parentMode }: { item: ResultItem; parentMode: boolean }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +68,6 @@ function ItemRow({ item, parentMode }: { item: ResultItem; parentMode: boolean }
     startTransition(async () => {
       const res = await overrideItemAction(item.id, !item.isCorrect);
       if (res.error) setError(res.error);
-      else router.refresh();
     });
   };
 

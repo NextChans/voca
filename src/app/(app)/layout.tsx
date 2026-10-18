@@ -15,11 +15,8 @@ const NAV = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, member } = await requireMember();
-  const [learner, parentMode, pin] = await Promise.all([
-    getCurrentLearner(member),
-    isParentMode(user.id, member.family_id),
-    getPinState(member.family_id),
-  ]);
+  const [learner, pin] = await Promise.all([getCurrentLearner(member), getPinState(member.family_id)]);
+  const parentMode = await isParentMode(user.id, member.family_id, pin);
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col">

@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { deleteWordsAction } from '@/app/actions';
 import { WordRow } from './WordRow';
@@ -51,7 +50,6 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
   };
 
   // 여러 개 선택해서 지우기 (부모 모드 전용)
-  const router = useRouter();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -81,7 +79,6 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
       if (res.error) return setNotice({ ok: false, text: res.error });
       setNotice({ ok: true, text: res.message ?? '지웠어요.' });
       exitSelecting();
-      router.refresh();
     });
   };
 
