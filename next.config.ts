@@ -32,6 +32,9 @@ const nextConfig: NextConfig = {
   experimental: {
     // 사진 OCR 업로드 시 server action이 아니라 route handler를 쓰지만, 단어 일괄 저장 여유분 확보
     serverActions: { bodySizeLimit: '1mb' },
+    // 탭 재방문 시 10초 동안은 클라이언트 캐시로 즉시 표시 (Next 15+ 기본 0초).
+    // 내 액션은 revalidatePath 로 즉시 무효화되고, 다른 기기의 변경만 최대 10초 늦게 보인다.
+    staleTimes: { dynamic: 10 },
   },
   async headers() {
     return [

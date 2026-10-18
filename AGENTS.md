@@ -66,4 +66,7 @@ docs/                       ARCHITECTURE / OPERATIONS / HISTORY
 - UI 문구는 아이가 읽는다는 전제로 쉬운 한국어. 오류는 `DomainError`/`ParentLockedError`로 던지면 액션의 `run()`이 사용자 메시지로 바꿉니다.
 - 커밋 메시지는 한국어 conventional 스타일(`feat:`, `fix(ocr):` …). 브랜치 → PR → CI 통과 → squash merge.
 - DB 마이그레이션이 포함된 PR은 **운영 DB에 SQL을 먼저 실행한 뒤 병합**해야 합니다(병합 즉시 Vercel이 배포함). 사용자에게 SQL 실행을 요청하고 확인 후 병합하세요.
+- **서버 액션 후 `router.refresh()` 금지.** 액션이 `revalidatePath`를 부르면 응답에 갱신된 화면이 이미 담겨 온다. refresh는 서버 렌더를 한 번 더 돌릴 뿐이다.
+- **상태를 바꾸는 서버 액션은 `revalidatePath('/', 'layout')` 필수** (redirect 하는 액션 포함). `next.config.ts`의 `staleTimes.dynamic`(10초) 때문에 빠뜨리면 이전 화면 캐시가 재사용된다. `tests/actionsRevalidate.test.ts`가 검사한다.
+- 인증 확인은 `src/proxy.ts`에서 `getClaims()`(JWT 로컬 검증, ES256), 페이지·액션의 `requireUser()`에서 `getUser()`(Auth 서버, 요청당 1회). proxy에 `getUser()`를 다시 넣지 말 것(탭 프리페치마다 Auth 왕복 발생).
 - 운영 상태 점검·장애 대응은 `docs/OPERATIONS.md`.

@@ -80,7 +80,20 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 - 결과는 항상 편집 가능한 표로 보여주고 사람이 확인 후 저장. 사진은 저장하지 않음.
 - 브라우저 Tesseract는 "단어 뜻" 한 줄 목록만 현실적으로 처리 가능(`src/lib/domain/wordParse.ts`).
 
-## 7. 보안 헤더 / 기타
+## 7. 성능 관련 구조
+
+| 항목 | 현재 방식 | 이유 |
+| --- | --- | --- |
+| 인증 확인 | proxy: `getClaims()`(ES256 JWKS 로컬 검증, 만료 시 refresh 후 쿠키 재기록) / 서버: `requireUser()`의 `getUser()` 요청당 1회 | 모든 요청(탭 프리페치 포함)이 proxy를 지나므로 Auth 왕복 제거. 페이지 1회 로드 시 Auth 호출 16 → 1 (측정) |
+| 공개 경로 | `/login`, `/auth/*`는 proxy 인증 확인 생략 | 불필요한 왕복 제거 |
+| 클라이언트 캐시 | `staleTimes.dynamic: 10` | 탭 재방문 즉시 표시. 다른 기기 변경은 최대 10초 늦게 보임 |
+| 액션 후 갱신 | 액션의 `revalidatePath('/', 'layout')` 응답만 사용, `router.refresh()` 없음 | 버튼 1회당 서버 렌더 2 → 1 (측정) |
+| 레이아웃 쿼리 | 소속 조회는 `getMembershipOnce`(요청 캐시), PIN 상태는 1회 조회 후 `isParentMode`에 전달 | 중복 DB 조회 제거 |
+| 탭 이동 | `(app)/loading.tsx` 스켈레톤 + 기본 prefetch(로딩 경계까지) | 누르는 즉시 반응. `prefetch={true}`는 5분 캐시라 사용 금지 |
+
+참고: 서버 액션 응답은 `revalidatePath` 범위와 무관하게 현재 화면을 레이아웃부터 다시 그린다(측정). 범위를 좁혀도 서버 비용은 줄지 않는다.
+
+## 8. 보안 헤더 / 기타
 
 - `next.config.ts`: CSP(`connect-src`는 `NEXT_PUBLIC_SUPABASE_URL` 출처 + jsDelivr), X-Frame-Options DENY, Permissions-Policy(camera=self).
 - `/api/tts`, `/api/ocr`: `sec-fetch-site` 교차 사이트 차단 + 로그인·가족 소속 확인.

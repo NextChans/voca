@@ -33,6 +33,7 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
 - Authentication → Sign In / Providers → Email: 활성. 부모 둘 다 가입 후 **Allow new users to sign up 끄기** 권장
   (자녀 계정은 서버 admin API로 만들므로 가입 차단과 무관)
 - Data API(PostgREST): 켜져 있어야 함(서버가 supabase-js로 사용). Exposed schemas에 `public`
+- Project Settings → JWT Keys: Current 키가 **ECC (P-256, ES256)** 여야 함(2026-10-18 확인). proxy의 `getClaims()`가 이 공개키로 로컬 검증한다. 대칭키(HS256)로 바꾸면 기능은 그대로지만 매 요청 Auth 서버 왕복으로 느려진다. 키 회전 시 JWKS는 인스턴스별 메모리에 캐시되므로 이전 키를 잠시 Standby로 남길 것
 - 기본 메일 발송은 제한적(시간당 소량). 인증 메일이 안 오면 Authentication → Users → Add user(Auto Confirm)로 생성 가능
 
 ## 배포 절차

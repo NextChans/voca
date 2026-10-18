@@ -15,10 +15,13 @@ export interface LearnerContext extends MemberContext {
   learner: repo.Learner;
 }
 
+/** 요청당 1회만 소속 조회 (requireMember 와 isParentMode 가 공유) */
+export const getMembershipOnce = cache(repo.getMembership);
+
 /** 로그인 + 가족 소속 확인. 가족이 없으면 온보딩으로. */
 export const requireMember = cache(async (): Promise<MemberContext> => {
   const user = await requireUser();
-  const member = await repo.getMembership(user.id);
+  const member = await getMembershipOnce(user.id);
   if (!member) redirect('/onboarding');
   return { user, member };
 });

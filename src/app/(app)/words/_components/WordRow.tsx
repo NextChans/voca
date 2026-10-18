@@ -1,7 +1,6 @@
 'use client';
 
 import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { deleteWordsAction, updateWordAction } from '@/app/actions';
 import { SpeakButton } from '@/components/SpeakButton';
@@ -21,7 +20,6 @@ export function WordRow({
   /** 여러 개 선택 모드일 때만 전달 */
   selection?: { selected: boolean; onToggle: () => void };
 }) {
-  const router = useRouter();
   const [revealed, setRevealed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [term, setTerm] = useState(word.term);
@@ -48,7 +46,6 @@ export function WordRow({
       const res = await updateWordAction(word.id, t, m);
       if (res.error) return setError(res.error);
       setEditing(false);
-      router.refresh();
     });
   };
 
@@ -56,8 +53,7 @@ export function WordRow({
     if (!window.confirm(`'${word.term}' 단어를 지울까요?\n시험 기록의 해당 문항은 그대로 남아요.`)) return;
     startTransition(async () => {
       const res = await deleteWordsAction([word.id]);
-      if (res.error) return setError(res.error);
-      router.refresh();
+      if (res.error) setError(res.error);
     });
   };
 

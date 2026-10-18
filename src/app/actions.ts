@@ -67,6 +67,7 @@ export async function signOutAction(): Promise<void> {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   await clearParentUnlocked();
+  revalidatePath('/', 'layout'); // 같은 기기의 다음 사용자에게 이전 계정 화면 캐시가 보이지 않도록
   redirect('/login');
 }
 
@@ -80,6 +81,7 @@ export async function createFamilyAction(_: ActionState, formData: FormData): Pr
     );
   });
   if (result.error) return result;
+  revalidatePath('/', 'layout');
   redirect('/profiles');
 }
 
@@ -91,6 +93,7 @@ export async function joinFamilyAction(_: ActionState, formData: FormData): Prom
     await repo.joinFamily(user.id, hashInviteCode(code), personNameSchema.parse(formData.get('display_name')));
   });
   if (result.error) return result;
+  revalidatePath('/', 'layout');
   redirect('/profiles');
 }
 
@@ -124,6 +127,7 @@ export async function unlockParentAction(_: ActionState, formData: FormData): Pr
     await setParentUnlocked(user.id);
   });
   if (result.error || result.message) return result;
+  revalidatePath('/', 'layout');
   const next = String(formData.get('next') ?? '');
   redirect(next.startsWith('/') && !next.startsWith('//') ? next : '/settings');
 }
@@ -156,6 +160,7 @@ export async function selectLearnerAction(learnerId: string): Promise<void> {
   const learner = await repo.getLearner(member.family_id, uuid.parse(learnerId));
   if (!learner) redirect('/profiles');
   await setSelectedLearner(learner.id);
+  revalidatePath('/', 'layout'); // 다른 자녀의 캐시된 화면이 보이지 않도록
   redirect('/');
 }
 
@@ -206,7 +211,7 @@ export async function createLearnerLoginAction(_: ActionState, formData: FormDat
     const password = kidPasswordSchema.parse(formData.get('password'));
     if (password !== String(formData.get('confirm') ?? '')) return { error: '두 비밀번호가 서로 달라요.' };
     await repo.createLearnerLogin(member.family_id, learnerId, loginId, loginIdToEmail(loginId), password);
-    revalidatePath('/settings');
+    revalidatePath('/', 'layout');
     return { message: `아이디 "${loginId}"로 로그인할 수 있어요.` };
   });
 }
@@ -226,7 +231,7 @@ export async function removeLearnerLoginAction(learnerId: string): Promise<Actio
   return run(async () => {
     const { member } = await parentCtx();
     await repo.removeLearnerLogin(member.family_id, uuid.parse(learnerId));
-    revalidatePath('/settings');
+    revalidatePath('/', 'layout');
     return { message: '로그인 계정을 삭제했어요. (단어와 시험 기록은 그대로예요)' };
   });
 }
@@ -264,7 +269,7 @@ export async function updateWordAction(wordId: string, term: string, meaning: st
       term: termSchema.parse(term),
       meaning: meaningSchema.parse(meaning),
     });
-    revalidatePath('/words');
+    revalidatePath('/', 'layout');
   });
 }
 
@@ -292,6 +297,7 @@ export async function startTestAction(_: ActionState, formData: FormData): Promi
     testId = await repo.createTest(member.family_id, learner.id, { kind: 'regular', mode, parentTestId: null });
   });
   if (!testId) return result;
+  revalidatePath('/', 'layout');
   redirect(`/test/${testId}`);
 }
 
@@ -308,6 +314,7 @@ export async function startRetestAction(parentTestId: string): Promise<ActionSta
     });
   });
   if (!testId) return result;
+  revalidatePath('/', 'layout');
   redirect(`/test/${testId}`);
 }
 
