@@ -17,7 +17,16 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'photo', label: '📷 사진' },
 ];
 
-export function WordEntry({ aiOcr, learnerName }: { aiOcr: boolean; learnerName: string }) {
+export function WordEntry({
+  aiOcr,
+  learnerName,
+  minTestWords,
+}: {
+  aiOcr: boolean;
+  learnerName: string;
+  /** 자녀별 설정의 '시험 최소 단어 수' */
+  minTestWords: number;
+}) {
   const [tab, setTab] = useState<Tab>('manual');
   const [rows, setRows] = useState<EditRow[]>(() => [newRow()]);
   const [state, setState] = useState<ActionState | undefined>();
@@ -134,7 +143,7 @@ export function WordEntry({ aiOcr, learnerName }: { aiOcr: boolean; learnerName:
           {pending ? '저장 중…' : `💾 ${learnerName}에게 ${filled.length}개 저장`}
         </button>
         <p className="text-center text-xs text-slate-500">
-          오늘 등록한 단어는 내일부터 시험에 나와요 · 시험은 50개 이상부터
+          오늘 등록한 단어는 내일부터 시험에 나와요 · 시험은 {minTestWords}개 이상부터
         </p>
         <FormMessage state={state} />
         {saved && (
