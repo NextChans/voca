@@ -23,7 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
         {member.role === 'child' ? (
           <div className="flex items-center gap-2 px-2 py-1">
-            <span className="text-2xl">{learner?.avatar ?? '🐣'}</span>
+            <span className="text-2xl">{learner?.avatar ?? '🐭'}</span>
             <span className="font-bold">{learner?.name}</span>
           </div>
         ) : (
