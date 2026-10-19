@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: '개인정보 처리방침' };
 const TRANSFERS = [
   {
     to: 'Vercel Inc.',
-    country: '미국 (앱 서버는 서울 리전에서 실행)',
+    country: '미국 (앱 서버는 호주 시드니 리전에서 실행)',
     items: '서비스 이용 중 주고받는 모든 정보 (계정·학습 정보, 단어 사진 등)',
     purpose: '웹 서비스 호스팅 및 요청 처리',
   },

@@ -7,7 +7,7 @@
    │  ① Supabase Auth 만 직접 호출 (로그인/로그아웃, 세션 쿠키)
    │  ② 나머지는 전부 Next.js 서버로: Server Components / Server Actions / Route Handlers
    ▼
-Next.js 서버 (Vercel, icn1)  ── BFF
+Next.js 서버 (Vercel, syd1 = DB와 같은 리전)  ── BFF
    │  requireUser → getMembership(역할·family_id) → repo.* (service_role, family_id 필수)
    ▼
 Supabase Postgres  ── 테이블은 RLS 활성 + 정책 없음 + anon/authenticated 권한 회수

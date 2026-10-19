@@ -20,6 +20,7 @@
 | #14 | 체감 속도 개선(기능 변경 없음): proxy `getClaims()`·공개 경로 생략, 액션 후 `router.refresh()` 제거, `staleTimes.dynamic` 10초, 레이아웃 중복 조회 제거, 로딩 스켈레톤, 모든 상태 변경 액션 `revalidatePath('/', 'layout')` + 검사 테스트 |
 | #15 | 운영 문서: Cloud TTS 적용, Gemini 유료 등급, 공개 검토 결과 |
 | #16 | 공개 준비 1: 개인정보 처리방침·이용약관(`/privacy`, `/terms`), 가입 시 필수 동의 + 이력 기록·재동의 게이트, 회원 탈퇴(마지막 부모면 가족 전체 삭제), 자녀 프로필 삭제, 부모 비밀번호 재설정. 마이그레이션 `20261019000000_consent_and_account_deletion.sql` |
+| #17 | Vercel 함수 리전 icn1 → syd1 (Supabase 시드니와 같은 리전, 쿼리당 대륙 간 왕복 제거) |
 
 ## 사용자 요구사항 원문 요약 (변경 시 기준)
 

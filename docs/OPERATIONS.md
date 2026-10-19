@@ -5,8 +5,8 @@
 | 항목 | 값 |
 | --- | --- |
 | 서비스 URL | https://voca-pink.vercel.app |
-| 호스팅 | Vercel (GitHub `NextChans/voca` main 브랜치 자동 배포, `vercel.json`: framework nextjs, region icn1) |
-| DB/Auth | Supabase 프로젝트 ref `juyduseodcrqfinsnqll` (`https://juyduseodcrqfinsnqll.supabase.co`), 리전 **ap-southeast-2 (시드니)** — 앱 서버(icn1)와 왕복 지연이 큼 |
+| 호스팅 | Vercel (GitHub `NextChans/voca` main 브랜치 자동 배포, `vercel.json`: framework nextjs, region **syd1** (2026-10-19, DB와 같은 시드니로 이동. 이전 icn1)) |
+| DB/Auth | Supabase 프로젝트 ref `juyduseodcrqfinsnqll` (`https://juyduseodcrqfinsnqll.supabase.co`), 리전 **ap-southeast-2 (시드니)**. 앱 서버도 syd1에 둬서 서버↔DB 왕복을 수 ms로 유지 (함수 리전을 옮기면 쿼리마다 대륙 간 왕복이 붙음) |
 | 사진 인식 | Gemini (`GEMINI_API_KEY`). Google Cloud 프로젝트에 결제 연결됨(2026-10-18) → 유료 등급(사진이 Google 학습에 쓰이지 않음, 소액 과금) |
 | 발음 | Google Cloud TTS (`GOOGLE_TTS_API_KEY`, 음성 `en-US-Neural2-F`), 운영 적용 확인(2026-10-18). Cloud 프로젝트 할당량 All requests per minute = 60 |
 | CI | GitHub Actions `.github/workflows/ci.yml` (PR·main push: typecheck → lint → test → build) |
