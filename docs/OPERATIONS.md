@@ -49,7 +49,7 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
    - 확인: 공개 키로 `GET /rest/v1/<table>?select=<새컬럼>` 시 `42703`(컬럼 없음)이 아니라 `42501`(권한 없음)이면 적용된 것
 3. 운영 적용 완료(2026-10-16): `20261016000000_init.sql`, `20261017000000_learner_login.sql`, `20261018000000_backfill_word_order.sql`(데이터 보정, 재실행 안전).
    운영 적용 완료(2026-10-19): `20261019000000_consent_and_account_deletion.sql` (PR #16).
-   **미적용**: `20261020000000_quotas_and_caps.sql` (PR #17, 병합 전 실행 필요. 한 트랜잭션. 테이블·함수·트리거·컬럼 추가와 PIN 함수 교체만, 기존 단어·시험 데이터 변경 없음).
+   운영 적용 완료(2026-10-19): `20261020000000_quotas_and_caps.sql` (PR #17, 한 트랜잭션, 기존 데이터 변경 없음).
    공개 전 점검: 아래 쿼리 결과가 `kst_week_start` 하나뿐이어야 함 (브라우저 롤이 실행 가능한 함수)
    `select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');`
    새 마이그레이션을 추가하면 이 목록에 적용 여부를 갱신하세요.
