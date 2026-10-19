@@ -8,9 +8,8 @@ export const OPERATOR = { name: '장현찬', email: 'babadung@gmail.com' } as co
 /** 동의 버전이자 시행일(YYYY-MM-DD, KST). 문서를 바꾸면 올린다. */
 export const LEGAL_VERSION = '2026-10-19';
 
-// TODO: 운영자가 Supabase 대시보드(Project Settings → General)에서 리전을 확인한 뒤 기입.
-// 예: 'AWS 서울(ap-northeast-2)'
-export const SUPABASE_REGION = '확인 필요';
+// Supabase 대시보드(Project Settings → General) 기준 DB 리전 (2026-10-19 확인)
+export const SUPABASE_REGION = '호주 시드니(AWS ap-southeast-2)';
 
 export const CONSENT_KINDS = ['terms', 'privacy', 'overseas_transfer', 'guardian'] as const;
 export type ConsentKind = (typeof CONSENT_KINDS)[number];

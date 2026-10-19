@@ -1,22 +1,23 @@
 -- 일반 공개 준비 (PR 1)
 -- 1) 약관·개인정보 동의 기록 (감사 추적용 이력 + 부모별 최신 동의 버전)
 -- 2) 회원 탈퇴: 마지막 부모가 탈퇴하면 가족 전체 삭제
+-- 재실행 안전(if not exists / create or replace): 대시보드에서 일부만 실행돼도 전체를 다시 돌리면 된다.
 
 -- ---------------------------------------------------------------- 동의 이력
-create table public.user_consents (
+create table if not exists public.user_consents (
   id         bigint generated always as identity primary key,
   user_id    uuid not null references auth.users (id) on delete cascade,
   version    text not null check (char_length(version) between 1 and 20),
   kinds      text[] not null,
   agreed_at  timestamptz not null default now()
 );
-create index user_consents_user_idx on public.user_consents (user_id, agreed_at desc);
+create index if not exists user_consents_user_idx on public.user_consents (user_id, agreed_at desc);
 
 alter table public.user_consents enable row level security;
 revoke all on public.user_consents from anon, authenticated;
 
 -- 부모가 마지막으로 동의한 문서 버전 (요청마다 이력 테이블을 조회하지 않도록)
-alter table public.family_members add column consent_version text;
+alter table public.family_members add column if not exists consent_version text;
 
 -- 필수 동의 항목이 모두 있어야 기록. 이력 추가와 최신 버전 갱신을 한 트랜잭션으로.
 create or replace function public.record_consent(p_user_id uuid, p_version text, p_kinds text[])
