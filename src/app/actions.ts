@@ -64,7 +64,7 @@ const termSchema = z
   .regex(/^[a-z][a-z\s'’\-./]*$/i, '영어 단어는 알파벳으로만 입력해 주세요.');
 const meaningSchema = z.string().trim().min(1, '뜻을 입력해 주세요.').max(200, '뜻이 너무 길어요.');
 const personNameSchema = z.string().trim().min(1, '이름을 입력해 주세요.').max(20, '이름이 너무 길어요.');
-const avatarSchema = z.string().trim().min(1).max(8).default('🐣');
+const avatarSchema = z.string().trim().min(1).max(8).default('🐭');
 
 /** 필수 동의 항목이 모두 체크됐는지 (체크박스 name="consent") */
 function parseConsents(formData: FormData): string[] {
