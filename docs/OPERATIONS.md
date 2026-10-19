@@ -21,10 +21,10 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Config | ✅ | `sb_publishable_…` (공개 키, 테이블 접근은 DB에서 차단됨) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Secret | ✅ | `sb_secret_…`. 서버 전용 |
 | `APP_SECRET` | Secret | ✅ | 32자 이상. 부모 모드 쿠키 서명. 바꾸면 열려 있던 부모 모드만 잠김 |
-| `GEMINI_API_KEY` | Secret | 권장 | Google AI Studio 발급. 무료 등급은 입력 데이터가 Google 서비스 개선에 쓰일 수 있음 |
+| `GEMINI_API_KEY` | Secret | 권장(설정됨) | Google AI Studio 발급. 운영 프로젝트는 결제 연결 → 유료 등급(입력이 학습에 쓰이지 않음). 무료 등급으로 바꾸면 처리방침 문구도 수정 |
 | `GEMINI_MODEL` | Config | 선택 | 기본 `gemini-3.5-flash-lite` |
 | `ANTHROPIC_API_KEY` | Secret | 선택 | Gemini 키가 없을 때만 사용 |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Config | 선택 | Cloudflare Turnstile 사이트 키. 설정하면 로그인·가입·비밀번호 재설정·탈퇴에 사람 확인 위젯. **Supabase CAPTCHA보다 먼저** 넣고 Redeploy |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Config | 선택(**미설정, 보류**) | Cloudflare Turnstile 사이트 키. 설정하면 로그인·가입·비밀번호 재설정·탈퇴에 사람 확인 위젯. **Supabase CAPTCHA보다 먼저** 넣고 Redeploy |
 | `GOOGLE_TTS_API_KEY` | Secret | 권장(설정됨) | Cloud Text-to-Speech API로만 제한한 키. 실패 시 `[api/tts] synthesis failed` 로그 + 502. 없으면 서버 합성 불가(503) → 기기 음성만 |
 
 Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 반영됩니다.
@@ -33,12 +33,12 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
 
 - Authentication → URL Configuration: Site URL `https://voca-pink.vercel.app`, Redirect URLs `https://voca-pink.vercel.app/auth/callback**` (비밀번호 재설정이 `?next=/auth/reset` 쿼리를 붙이므로 와일드카드)
 - Authentication → Emails → Reset Password 템플릿: 한국어로 바꾸면 좋음
-- Authentication → Sign In / Providers → Email: 활성. 부모 둘 다 가입 후 **Allow new users to sign up 끄기** 권장
+- Authentication → Sign In / Providers → Email: 활성, Confirm email 켜기. **일반 공개 시 Allow new users to sign up 켜기**(가족 전용으로 쓸 땐 끄기)
   (자녀 계정은 서버 admin API로 만들므로 가입 차단과 무관)
 - Data API(PostgREST): 켜져 있어야 함(서버가 supabase-js로 사용). Exposed schemas에 `public`
 - Project Settings → JWT Keys: Current 키가 **ECC (P-256, ES256)** 여야 함(2026-10-18 확인). proxy의 `getClaims()`가 이 공개키로 로컬 검증한다. 대칭키(HS256)로 바꾸면 기능은 그대로지만 매 요청 Auth 서버 왕복으로 느려진다. 키 회전 시 JWKS는 인스턴스별 메모리에 캐시되므로 이전 키를 잠시 Standby로 남길 것
-- Authentication → Providers → Email: **Secure password change** 켜기 (비밀번호 변경 시 재인증)
-- 기본 메일 발송은 제한적(시간당 소량). 인증 메일이 안 오면 Authentication → Users → Add user(Auto Confirm)로 생성 가능
+- Authentication → Sign In / Providers → Email: **Secure password change** 켜짐(2026-10-19 설정, 비밀번호 변경 시 재인증)
+- 기본 메일 발송은 제한적(시간당 소량). **일반 공개 전 커스텀 SMTP(Resend 등) 연결 필요**. 인증 메일이 안 오면 Authentication → Users → Add user(Auto Confirm)로 생성 가능
 
 ## 배포 절차
 
@@ -50,7 +50,7 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
 3. 운영 적용 완료(2026-10-16): `20261016000000_init.sql`, `20261017000000_learner_login.sql`, `20261018000000_backfill_word_order.sql`(데이터 보정, 재실행 안전).
    운영 적용 완료(2026-10-19): `20261019000000_consent_and_account_deletion.sql` (PR #16).
    운영 적용 완료(2026-10-19): `20261020000000_quotas_and_caps.sql` (PR #17, 한 트랜잭션, 기존 데이터 변경 없음).
-   공개 전 점검: 아래 쿼리 결과가 `kst_week_start` 하나뿐이어야 함 (브라우저 롤이 실행 가능한 함수)
+   함수 권한 점검(2026-10-19 통과): 아래 쿼리 결과가 `kst_week_start`와 Supabase 기본 이벤트 트리거 `rls_auto_enable` 뿐이어야 함
    `select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');`
    새 마이그레이션을 추가하면 이 목록에 적용 여부를 갱신하세요.
 

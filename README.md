@@ -1,13 +1,13 @@
 # Voca — 우리 아이 영어 단어 시험
 
-두 자녀가 각자 영어 단어를 등록해 두고 **일주일에 두 번** 시험을 보는 가족용 웹앱입니다.
-자동 채점, 결과 보관, 틀린 단어 재시험, 발음 듣기를 지원합니다.
+아이들이 각자 영어 단어를 등록해 두고 **일주일에 정해진 횟수**(기본 2회) 시험을 보는 가족용 웹앱입니다.
+자동 채점, 결과 보관, 틀린 단어 재시험, 연습, 발음 듣기를 지원합니다. 다른 가족도 쓸 수 있도록 무료 공개 준비(약관·동의·탈퇴·한도·보안)가 되어 있습니다.
 
 - **Frontend/BFF**: Next.js 16 (App Router, Server Components, Server Actions), TypeScript strict, Tailwind v4
 - **DB/Auth**: Supabase (Postgres + Auth)
-- **배포**: Vercel
+- **배포**: Vercel (함수 리전 `syd1` = DB와 같은 리전)
 - **사진 인식**: Gemini(`GEMINI_API_KEY`, 무료 등급 가능) → Claude(`ANTHROPIC_API_KEY`) → 브라우저 내 Tesseract OCR 순으로 사용
-- **발음**: 기기 내장 음성(Web Speech API) + 서버 TTS(`/api/tts`, 시험 철자 문항)
+- **발음**: 기기 내장 음성(Web Speech API) 우선 + Google Cloud TTS(`/api/tts`, 시험 철자 문항·영어 음성 없는 기기)
 
 **운영**: https://voca-pink.vercel.app
 
@@ -29,7 +29,7 @@
 | --- | --- |
 | 가족/계정 | 부모 2명이 각자 이메일 계정으로 로그인. 한 명이 가족을 만들고 **초대코드**(72시간·1회용)로 배우자 합류 |
 | 자녀 | 자녀별 프로필(단어·시험·횟수 분리). 부모가 설정에서 **자녀 전용 아이디/비밀번호**를 만들어 주면 아이 혼자 로그인 가능(본인 프로필 고정, 부모 기능 불가). 아이디 없이 부모 계정에서 "누가 공부하나요?"로 골라 쓸 수도 있음 |
-| 부모 모드 | 가족 공용 **부모 PIN**(4~8자리)으로 잠금 해제(30분). 단어 수정/삭제(여러 개 선택 삭제 포함), 채점 정정, 설정, 진행 중 시험 취소는 부모 모드에서만 가능. 5회 실패 시 5분 잠금 |
+| 부모 모드 | 가족 공용 **부모 PIN**(4~8자리)으로 잠금 해제(30분). 단어 수정/삭제(여러 개 선택 삭제 포함), 채점 정정, 설정, 진행 중 시험 취소는 부모 모드에서만 가능. 5회 틀릴 때마다 5→10→20분… 점점 길게 잠금 |
 | 단어 등록 | **자녀 모드에서도 가능**. 직접 입력 / 여러 줄 붙여넣기(`apple 사과`, `apple - 사과`, 탭 구분 등) / **사진 촬영**(사전형 교재도 AI 인식) → 확인·수정 후 저장. 영어 칸은 영문 키보드 힌트, 단어장은 **등록한 순서대로** 표시 |
 | 출제 규칙 | 정기 시험은 **등록 다음 날(KST)부터**, 아직 정기 시험에 나온 적 없는 단어를 **전부** 출제. 출제 대상이 **50개 미만이면 시작 불가**. **주 2회**(KST 월요일 시작) |
 | 시험 유형 | 철자 쓰기(뜻+발음 → 영어) / 뜻 쓰기(영어 → 한글 뜻) / 섞어서 |
@@ -37,6 +37,8 @@
 | 재시험 | 틀린 문항만, 주간 횟수에 포함되지 않음. 다 맞을 때까지 반복 가능 |
 | 연습 | **오답 연습**: 틀렸던 단어(최근 틀림 / 한 번이라도 틀림). **새 단어 연습**: 아직 정기 시험에 안 나온 단어(오늘 등록 / 전부, 진행 중 시험 문항 제외). 카드 넘기기·철자 쓰기·뜻 쓰기로 무제한, 모르는 단어는 다시 나와 다 맞힐 때까지. 점수·횟수에 영향 없음 |
 | 기록 | 시험별 결과·점수 추이, 단어별 틀린 횟수. 시험 문항은 매번 **무작위 순서** |
+| 공개 서비스 | 소개 페이지(`/welcome`), 개인정보 처리방침·이용약관, 가입 시 필수 동의(만 14세 미만 자녀는 부모 동의)·개정 시 재동의, 회원 탈퇴(마지막 부모면 가족 전체 삭제)·자녀 프로필 삭제, 부모 비밀번호 재설정, 처음 쓰는 가족용 체크리스트 |
+| 한도 | 사진 인식 가족당 하루 10회, 서버 발음 하루 500회, 자녀 4명, 자녀당 단어 5,000개 (`src/lib/limits.ts` ↔ DB) |
 
 자녀별 주간 횟수(기본 2)와 최소 출제 단어 수(기본 50)는 설정에서 바꿀 수 있습니다.
 
@@ -52,11 +54,11 @@
 
 ### 1. Supabase
 
-1. [supabase.com](https://supabase.com)에서 프로젝트를 만듭니다(Region: Northeast Asia (Seoul) 권장).
+1. [supabase.com](https://supabase.com)에서 프로젝트를 만듭니다. **`vercel.json`의 `regions`를 DB 리전과 같은 곳**으로 맞추세요(예: Seoul → `icn1`, Sydney → `syd1`). 다르면 쿼리마다 대륙 간 왕복이 붙습니다.
 2. **SQL Editor**에서 `supabase/migrations/` 의 SQL 파일을 **파일명 순서대로** 모두 실행합니다.
    (Supabase CLI를 쓴다면 `npx supabase link --project-ref <ref>` 후 `npx supabase db push`)
-3. **Authentication → Sign In / Providers → Email**: 활성화합니다. 가족만 쓸 경우 두 부모가 가입한 뒤 **Allow new users to sign up**을 끄는 것을 권장합니다.
-4. **Authentication → URL Configuration**: Site URL을 Vercel 도메인(예: `https://voca-xxx.vercel.app`)으로, Redirect URLs에 `https://voca-xxx.vercel.app/auth/callback`을 추가합니다.
+3. **Authentication → Sign In / Providers → Email**: 활성화, Confirm email·**Secure password change** 켜기. 가족만 쓸 경우 두 부모가 가입한 뒤 **Allow new users to sign up**을 끄고, 일반 공개 시에는 커스텀 SMTP를 연결한 뒤 켭니다.
+4. **Authentication → URL Configuration**: Site URL을 Vercel 도메인(예: `https://voca-xxx.vercel.app`)으로, Redirect URLs에 `https://voca-xxx.vercel.app/auth/callback**`(비밀번호 재설정이 쿼리를 붙이므로 `**`)를 추가합니다.
 5. **Project Settings → API**에서 Project URL, `anon`(publishable) 키, `service_role`(secret) 키를 확인합니다.
 
 ### 2. Vercel
@@ -73,16 +75,17 @@
 | `GEMINI_API_KEY` | 권장 | 교재 사진 단어 인식(Gemini, **무료 등급 사용 가능**, [Google AI Studio](https://aistudio.google.com/apikey)에서 발급). 설정 시 최우선 사용 |
 | `GEMINI_MODEL` | 선택 | 기본 `gemini-3.5-flash-lite` (못 찾으면 다른 Flash 모델로 자동 재시도) |
 | `ANTHROPIC_API_KEY` | 선택 | Gemini 키가 없을 때 Claude Vision 사용. 둘 다 없으면 브라우저 OCR(사전형 교재는 인식 불가) |
-| `GOOGLE_TTS_API_KEY` | 선택 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 서버 합성 없이 기기 음성만 사용(시험 철자 문항 발음 불가) |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 선택 | Cloudflare Turnstile CAPTCHA. 켜는 순서는 docs/OPERATIONS.md (순서가 틀리면 로그인 불가) |
+| `GOOGLE_TTS_API_KEY` | 권장 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 서버 합성 없이 기기 음성만 사용(시험 철자 문항 발음 불가) |
 
 3. Deploy합니다.
 
 ### 3. 처음 사용
 
-1. 사이트 접속 → 부모 한 명이 **회원가입** → 메일 인증 → 로그인합니다.
-2. **새 가족 만들기**(가족 이름, 호칭) → **설정**에서 **부모 PIN을 먼저 설정**합니다.
+1. 사이트 접속(소개 페이지) → 부모 한 명이 **회원가입** → 메일 인증 → 로그인합니다.
+2. **새 가족 만들기**(가족 이름, 호칭, 필수 약관 동의) → **설정**에서 **부모 PIN을 먼저 설정**합니다.
 3. **자녀 추가**(두 아이) → 설정 → **배우자 초대코드 만들기** → 배우자가 회원가입 후 코드를 입력합니다.
-4. 자녀를 선택해 **단어 등록**(사진/직접 입력) → 다음 날부터 50개 이상이면 시험을 볼 수 있습니다.
+4. 자녀를 선택해 **단어 등록**(사진/직접 입력) → 다음 날부터 최소 단어 수(기본 50) 이상이면 시험을 볼 수 있습니다.
 5. 설정 → 자녀별 설정에서 **자녀 로그인 계정**(아이디/비밀번호)을 만들어 주면 아이가 혼자 로그인합니다. 로그인 화면에 아이디만 입력하면 됩니다.
 6. 자녀 계정 없이 쓸 때는 아이 기기에서 부모 계정으로 로그인한 뒤 자녀를 선택하고 상단의 🔓 배지를 눌러 **부모 모드를 잠가** 두세요.
 
@@ -112,11 +115,13 @@ npm run build
 supabase/migrations/   스키마·RLS·트랜잭션 함수 (출제/채점/횟수 규칙의 원천)
 src/proxy.ts           세션 갱신 + 비로그인 리다이렉트 (Next 16의 middleware)
 src/app/actions.ts     Server Actions (입력 검증 → 인가 → repo)
-src/app/(app)/         로그인 후 화면 (홈, 단어, 시험, 기록, 설정, 프로필)
+src/app/(app)/         로그인 후 화면 (홈, 단어, 시험, 연습, 기록, 설정, 프로필)
+src/app/welcome, privacy, terms, consent, auth   공개 페이지·동의·인증(비밀번호 재설정)
 src/app/api/tts        발음 합성 (문항 id 기반)
 src/app/api/ocr        사진 → 단어 목록 (src/lib/server/ocr: Gemini / Claude)
 src/lib/domain/        순수 도메인 로직 (채점, 주차, 파싱, PIN/토큰, 초대코드, 자녀 아이디)
 src/lib/server/        서버 전용 (인증 컨텍스트, 부모 모드, repo)
+src/lib/legal.ts, limits.ts   처리방침 버전·운영자 정보 / 사용 한도
 tests/                 vitest
 e2e/                   Playwright E2E (e2e/README.md)
 docs/                  아키텍처·운영·이력 문서
