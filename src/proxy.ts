@@ -11,10 +11,12 @@ import { publicEnv } from '@/lib/env';
  * getSession 이 refresh token 으로 갱신해 setAll 로 쿠키에 다시 쓴다.
  * 폐기된 세션까지 확인하는 getUser() 는 서버 쪽 requireUser() 에서 요청당 1회만 한다.
  */
+const PUBLIC_PATHS = new Set(['/login', '/privacy', '/terms']);
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // 공개 경로는 인증 확인 불필요 (로그인 페이지는 자체적으로 getUser 로 리다이렉트 판단)
-  if (pathname === '/login' || pathname.startsWith('/auth/')) return NextResponse.next({ request });
+  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith('/auth/')) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 

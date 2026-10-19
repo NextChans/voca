@@ -34,6 +34,7 @@ try {
   await login(dad, 'dad2@test.local', 'password123!');
   await dad.getByPlaceholder('예: 행복한 우리집').fill('우리집');
   await dad.getByPlaceholder('예: 아빠, 엄마').fill('아빠');
+  await dad.getByLabel('모두 동의해요').first().check();
   await dad.getByRole('button', { name: /가족 만들기/ }).click();
   await dad.waitForURL(/\/profiles/);
   await dad.getByPlaceholder('예: 지우').fill('지우');
@@ -110,6 +111,21 @@ try {
   const kid2 = await (await browser.newContext()).newPage();
   await login(kid2, 'jiwoo', 'newpw456');
   log('부모: 자녀 비밀번호 재설정 → 새 비밀번호 로그인');
+
+  // 부모가 자녀 프로필 삭제 → 자녀 로그인 계정도 삭제되어 로그인 불가
+  await dad.goto(`${BASE}/settings`);
+  await dad.getByText('지우 프로필 삭제').click();
+  await dad.getByLabel(/이름 '지우'/).fill('지우');
+  await dad.getByRole('button', { name: '삭제', exact: true }).click();
+  await dad.getByText('지우의 프로필과 기록을 모두 삭제했어요.').waitFor();
+  const kid3 = await (await browser.newContext()).newPage();
+  await kid3.goto(`${BASE}/login`);
+  await kid3.locator('input[name=email]').fill('jiwoo');
+  await kid3.locator('input[name=password]').first().fill('newpw456');
+  await kid3.locator('form button[type=submit]').first().click();
+  await kid3.getByRole('alert').first().waitFor();
+  if (!kid3.url().includes('/login')) throw new Error('삭제된 자녀 계정으로 로그인됨');
+  log('부모: 자녀 프로필 삭제 → 자녀 계정 로그인 불가');
 
   console.log('page errors:', errors.length ? errors : 'none');
 } catch (e) {

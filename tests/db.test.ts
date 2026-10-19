@@ -133,6 +133,59 @@ describe('learner login', () => {
   });
 });
 
+describe('consent / account deletion', () => {
+  beforeEach(setup);
+  const ALL = `array['terms','privacy','overseas_transfer','guardian']`;
+
+  it('필수 동의가 모두 있어야 기록되고, 부모의 최신 동의 버전이 갱신된다', async () => {
+    await createFamilyWithLearner();
+    await expectError(
+      db.query(`select public.record_consent($1, 'v1', array['terms','privacy'])`, [PARENT_A]),
+      'CONSENT_INCOMPLETE'
+    );
+    await db.query(`select public.record_consent($1, 'v1', ${ALL})`, [PARENT_A]);
+    await db.query(`select public.record_consent($1, 'v2', ${ALL})`, [PARENT_A]);
+    const m = await one<{ consent_version: string }>(
+      `select consent_version from public.family_members where user_id = $1`,
+      [PARENT_A]
+    );
+    expect(m.consent_version).toBe('v2');
+    const hist = await q(`select version from public.user_consents where user_id = $1 order by id`, [PARENT_A]);
+    expect(hist.map((r) => r.version)).toEqual(['v1', 'v2']);
+  });
+
+  it('다른 부모가 남아 있으면 본인만 탈퇴, 마지막 부모면 가족 전체와 자녀 계정 목록을 돌려준다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await addWords(family, learner, 3, 1);
+    await db.query(`update public.learners set user_id = $1, login_id = 'jiwoo' where id = $2`, [STRANGER, learner]);
+    await db.query(
+      `insert into public.family_invites (family_id, code_hash, created_by, expires_at)
+       values ($1, 'h', $2, now() + interval '1 day')`,
+      [family, PARENT_A]
+    );
+    await db.query(`select public.join_family($1, 'h', '엄마')`, [PARENT_B]);
+
+    const first = await one<{ r: { family_deleted: boolean; kid_user_ids: string[] } }>(
+      `select public.delete_parent_account($1) as r`,
+      [PARENT_A]
+    );
+    expect(first.r).toEqual({ family_deleted: false, kid_user_ids: [] });
+    expect((await q(`select 1 from public.words where family_id = $1`, [family])).length).toBe(3);
+
+    const last = await one<{ r: { family_deleted: boolean; kid_user_ids: string[] } }>(
+      `select public.delete_parent_account($1) as r`,
+      [PARENT_B]
+    );
+    expect(last.r).toEqual({ family_deleted: true, kid_user_ids: [STRANGER] });
+    for (const t of ['families', 'family_members', 'learners', 'words', 'tests', 'test_items']) {
+      expect((await q(`select 1 from public.${t}`)).length, t).toBe(0);
+    }
+    // 가족이 없는 계정은 아무것도 지우지 않는다
+    const none = await one<{ r: { family_deleted: boolean } }>(`select public.delete_parent_account($1) as r`, [PARENT_A]);
+    expect(none.r.family_deleted).toBe(false);
+  });
+});
+
 describe('create_test (regular)', () => {
   beforeEach(setup);
 

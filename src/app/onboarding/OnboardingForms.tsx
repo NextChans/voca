@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { createFamilyAction, joinFamilyAction, type ActionState } from '@/app/actions';
+import { ConsentFields } from '@/components/ConsentFields';
 import { FormMessage } from '@/components/FormMessage';
 import { SubmitButton } from '@/components/SubmitButton';
 
@@ -37,6 +38,7 @@ export function CreateFamilyForm() {
           placeholder="예: 아빠, 엄마"
         />
       </div>
+      <ConsentFields />
       <SubmitButton className="btn-primary w-full py-3 text-base" pendingText="만드는 중…">
         가족 만들기
       </SubmitButton>
@@ -77,6 +79,7 @@ export function JoinFamilyForm() {
           placeholder="예: 엄마, 아빠"
         />
       </div>
+      <ConsentFields />
       <SubmitButton className="btn-secondary w-full py-3 text-base" pendingText="확인 중…">
         가족에 합류하기
       </SubmitButton>

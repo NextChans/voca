@@ -14,14 +14,23 @@ import {
 import { isValidLoginId, loginIdToEmail, MIN_KID_PASSWORD, normalizeLoginId } from '@/lib/domain/kidLogin';
 import { hashPin, isValidPin, verifyPin } from '@/lib/domain/parentToken';
 import { requireUser } from '@/lib/server/auth';
-import { requireLearner, requireMember, setSelectedLearner } from '@/lib/server/context';
+import {
+  clearSelectedLearner,
+  getMembershipOnce,
+  requireLearner,
+  requireMember,
+  setSelectedLearner,
+} from '@/lib/server/context';
 import {
   clearParentUnlocked,
   ParentLockedError,
   requireParent,
   setParentUnlocked,
 } from '@/lib/server/parent';
+import { CONSENT_KINDS, LEGAL_VERSION } from '@/lib/legal';
 import * as repo from '@/lib/server/repo';
+import { createClient } from '@supabase/supabase-js';
+import { publicEnv } from '@/lib/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export interface ActionState {
@@ -54,6 +63,15 @@ const meaningSchema = z.string().trim().min(1, '뜻을 입력해 주세요.').ma
 const personNameSchema = z.string().trim().min(1, '이름을 입력해 주세요.').max(20, '이름이 너무 길어요.');
 const avatarSchema = z.string().trim().min(1).max(8).default('🐣');
 
+/** 필수 동의 항목이 모두 체크됐는지 (체크박스 name="consent") */
+function parseConsents(formData: FormData): string[] {
+  const kinds = formData.getAll('consent').map(String);
+  if (!CONSENT_KINDS.every((k) => kinds.includes(k))) {
+    throw new repo.DomainError('필수 약관에 모두 동의해 주세요.');
+  }
+  return [...CONSENT_KINDS];
+}
+
 /** 부모 전용 액션 공통 가드 */
 async function parentCtx() {
   const ctx = await requireMember();
@@ -74,11 +92,14 @@ export async function signOutAction(): Promise<void> {
 export async function createFamilyAction(_: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireUser();
   const result = await run(async () => {
+    const consents = parseConsents(formData);
     await repo.createFamily(
       user.id,
       z.string().trim().min(1, '가족 이름을 입력해 주세요.').max(30).parse(formData.get('family_name')),
       personNameSchema.parse(formData.get('display_name'))
     );
+    // 가족 생성 직후 기록. 실패해도 다음 화면에서 /consent 로 다시 받는다(자가 복구).
+    await repo.recordConsent(user.id, LEGAL_VERSION, consents);
   });
   if (result.error) return result;
   revalidatePath('/', 'layout');
@@ -90,7 +111,9 @@ export async function joinFamilyAction(_: ActionState, formData: FormData): Prom
   const result = await run(async () => {
     const code = normalizeInviteCode(String(formData.get('code') ?? ''));
     if (code.length !== 8) return { error: '초대코드 8자리를 입력해 주세요.' };
+    const consents = parseConsents(formData);
     await repo.joinFamily(user.id, hashInviteCode(code), personNameSchema.parse(formData.get('display_name')));
+    await repo.recordConsent(user.id, LEGAL_VERSION, consents);
   });
   if (result.error) return result;
   revalidatePath('/', 'layout');
@@ -234,6 +257,77 @@ export async function removeLearnerLoginAction(learnerId: string): Promise<Actio
     revalidatePath('/', 'layout');
     return { message: '로그인 계정을 삭제했어요. (단어와 시험 기록은 그대로예요)' };
   });
+}
+
+/** 자녀 프로필 삭제 (단어·시험 기록과 자녀 로그인 계정까지). 부모 모드 + 이름 재입력 확인. */
+export async function deleteLearnerAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  let deletedName = '';
+  const result = await run(async () => {
+    const { user, member } = await parentCtx();
+    const learnerId = uuid.parse(formData.get('learner_id'));
+    const learner = await repo.getLearner(member.family_id, learnerId);
+    if (!learner) return { error: '자녀를 찾을 수 없어요.' };
+    if (String(formData.get('confirm_name') ?? '').trim() !== learner.name) {
+      return { error: `확인을 위해 이름 '${learner.name}'을(를) 정확히 입력해 주세요.` };
+    }
+    await repo.deleteLearner(member.family_id, learnerId);
+    console.info('[audit] learner deleted', { family: member.family_id, learner: learnerId, by: user.id });
+    deletedName = learner.name;
+  });
+  if (result.error || !deletedName) return result;
+  revalidatePath('/', 'layout');
+  // 삭제된 자녀의 폼은 화면에서 사라지므로 결과는 설정 화면 상단에 표시
+  redirect(`/settings?removed=${encodeURIComponent(deletedName)}`);
+}
+
+// ================================================================ 동의 / 탈퇴
+
+/** 약관 재동의 (기존 가입자, 문서 개정 시). requireMember 는 동의 전이라 /consent 로 보내므로 직접 확인한다. */
+export async function recordConsentAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const result = await run(async () => {
+    const member = await getMembershipOnce(user.id);
+    if (!member) return { error: '가족 정보가 없어요.' };
+    if (member.role !== 'parent') return { error: '부모님 계정에서만 동의할 수 있어요.' };
+    await repo.recordConsent(user.id, LEGAL_VERSION, parseConsents(formData));
+  });
+  if (result.error) return result;
+  revalidatePath('/', 'layout');
+  redirect('/');
+}
+
+/**
+ * 부모 회원 탈퇴. 비밀번호 재확인 + '탈퇴' 입력. 다른 부모가 있으면 본인만, 마지막 부모면 가족 전체 삭제.
+ * 부모 모드(PIN)는 요구하지 않는다: 비밀번호 재확인이 더 강하고, 탈퇴는 본인 계정에 대한 권리이므로.
+ */
+export async function deleteAccountAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const result = await run(async () => {
+    const member = await getMembershipOnce(user.id);
+    if (member?.role === 'child') return { error: '아이 계정은 부모님이 설정에서 지울 수 있어요.' };
+    if (String(formData.get('confirm') ?? '').trim() !== '탈퇴') return { error: "확인 칸에 '탈퇴'라고 입력해 주세요." };
+    if (!user.email) return { error: '계정 정보를 확인할 수 없어요.' };
+    // 비밀번호 재확인: 세션을 저장하지 않는 별도 클라이언트로 로그인 시도
+    const verifier = createClient(publicEnv.supabaseUrl, publicEnv.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const { error: authError } = await verifier.auth.signInWithPassword({
+      email: user.email,
+      password: String(formData.get('password') ?? ''),
+    });
+    if (authError) return { error: '비밀번호가 맞지 않아요.' };
+    await verifier.auth.signOut().catch(() => {});
+
+    const { familyDeleted, kidAccounts } = await repo.deleteParentAccount(user.id);
+    console.info('[audit] account deleted', { user: user.id, family: member?.family_id, familyDeleted, kidAccounts });
+  });
+  if (result.error) return result;
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut().catch(() => {});
+  await clearParentUnlocked();
+  await clearSelectedLearner();
+  revalidatePath('/', 'layout');
+  redirect('/login?deleted=1');
 }
 
 // ================================================================ 단어 (현재 선택된 자녀)

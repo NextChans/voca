@@ -30,7 +30,8 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
 
 ## Supabase 설정 체크리스트
 
-- Authentication → URL Configuration: Site URL `https://voca-pink.vercel.app`, Redirect URLs `https://voca-pink.vercel.app/auth/callback`
+- Authentication → URL Configuration: Site URL `https://voca-pink.vercel.app`, Redirect URLs `https://voca-pink.vercel.app/auth/callback**` (비밀번호 재설정이 `?next=/auth/reset` 쿼리를 붙이므로 와일드카드)
+- Authentication → Emails → Reset Password 템플릿: 한국어로 바꾸면 좋음
 - Authentication → Sign In / Providers → Email: 활성. 부모 둘 다 가입 후 **Allow new users to sign up 끄기** 권장
   (자녀 계정은 서버 admin API로 만들므로 가입 차단과 무관)
 - Data API(PostgREST): 켜져 있어야 함(서버가 supabase-js로 사용). Exposed schemas에 `public`
@@ -45,6 +46,7 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
    - 또는 로컬에서 `npx supabase link --project-ref juyduseodcrqfinsnqll && npx supabase db push`
    - 확인: 공개 키로 `GET /rest/v1/<table>?select=<새컬럼>` 시 `42703`(컬럼 없음)이 아니라 `42501`(권한 없음)이면 적용된 것
 3. 운영 적용 완료(2026-10-16): `20261016000000_init.sql`, `20261017000000_learner_login.sql`, `20261018000000_backfill_word_order.sql`(데이터 보정, 재실행 안전).
+   **미적용**: `20261019000000_consent_and_account_deletion.sql` (PR #16, 병합 전 실행 필요).
    새 마이그레이션을 추가하면 이 목록에 적용 여부를 갱신하세요.
 
 ## 빠른 점검
@@ -70,6 +72,8 @@ curl -s "https://juyduseodcrqfinsnqll.supabase.co/rest/v1/words?select=id&limit=
 | 자녀가 시험 시작 불가 | 홈/시험 화면에 이유 표시: 주간 횟수 소진, 출제 대상 < 50, 진행 중 시험 존재(부모가 설정에서 취소 가능) |
 | 부모 PIN 분실 | SQL Editor: `update families set parent_pin_hash = null where id = '<family id>';` → 앱 설정에서 새 PIN 설정 |
 | 발음 버튼 ⚠️ / `/api/tts` 502 | Vercel Logs `[api/tts]` 확인. 403: TTS API 사용 설정·키 제한, 429: Cloud 할당량(분당 60), 400: 음성 이름 |
+| 부모 비밀번호 분실 | 로그인 → '비밀번호를 잊었어요' → 메일 링크를 **같은 브라우저**에서 열기 → `/auth/reset` |
+| 탈퇴 후 Auth 사용자가 남음 | Vercel Logs `[repo] deleteParentAccount auth delete failed` / `deleteLearner auth delete failed` 의 userId 를 Authentication → Users 에서 삭제 (데이터는 이미 삭제됨) |
 | 자녀 비밀번호 분실 | 부모 모드 → 설정 → 자녀별 설정 → 비밀번호 바꾸기 |
 
 ## 로컬 개발 / 검증

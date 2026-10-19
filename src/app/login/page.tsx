@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/server/auth';
 import { LoginForm } from './LoginForm';
@@ -11,7 +12,9 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   if (await getUser()) redirect('/');
-  const linkFailed = (await searchParams).error === 'link';
+  const sp = await searchParams;
+  const linkFailed = sp.error === 'link';
+  const deleted = sp.deleted === '1';
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-10">
@@ -29,7 +32,21 @@ export default async function LoginPage({
           인증 링크가 만료됐거나 다른 기기에서 열렸어요. 가입한 이메일과 비밀번호로 로그인해 보세요.
         </p>
       )}
+      {deleted && (
+        <p role="status" className="mb-4 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          회원 탈퇴가 완료됐어요. 그동안 이용해 주셔서 고마워요.
+        </p>
+      )}
       <LoginForm />
+      <p className="mt-6 text-center text-xs text-slate-400">
+        <Link href="/terms" className="underline">
+          이용약관
+        </Link>{' '}
+        ·{' '}
+        <Link href="/privacy" className="underline">
+          개인정보 처리방침
+        </Link>
+      </p>
     </main>
   );
 }

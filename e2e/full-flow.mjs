@@ -54,8 +54,16 @@ async function main() {
   await shot(dad, 'onboarding');
   await dad.getByPlaceholder('예: 행복한 우리집').fill('우리집');
   await dad.getByPlaceholder('예: 아빠, 엄마').fill('아빠');
+  // 필수 동의 없이 제출 → 브라우저 required 로 막힘 (URL 유지)
+  await dad.getByRole('button', { name: /가족 만들기/ }).click();
+  await dad.waitForTimeout(500);
+  if (!dad.url().includes('/onboarding')) throw new Error('동의 없이 가족 생성됨');
+  await dad.getByLabel('모두 동의해요').first().check();
   await dad.getByRole('button', { name: /가족 만들기/ }).click();
   await dad.waitForURL(/\/profiles/);
+  const consent = (await db.query(`select version, kinds from public.user_consents`)).rows;
+  if (consent.length !== 1 || consent[0].kinds.length !== 4) throw new Error(`동의 기록 이상 ${JSON.stringify(consent)}`);
+  log('필수 동의 + 기록', consent[0].version);
   log('가족 생성');
 
   // 2. 자녀 2명 추가
@@ -88,6 +96,7 @@ async function main() {
   await mom.waitForURL(/\/onboarding/);
   await mom.getByPlaceholder('ABCD-EFGH').fill(code.toLowerCase());
   await mom.getByPlaceholder('예: 엄마, 아빠').fill('엄마');
+  await mom.getByLabel('모두 동의해요').last().check();
   await mom.getByRole('button', { name: /합류/ }).click();
   await mom.waitForURL(/\/profiles/);
   await mom.getByText('하준').first().waitFor();
@@ -285,6 +294,67 @@ async function main() {
   await shot(dad, 'results');
   await dad.goto(`${BASE}/`);
   await shot(dad, 'home');
+
+  // 15. 약관 개정/기존 가입자: 동의 버전이 다르면 /consent 로, 동의 후 복귀
+  await db.query(`update public.family_members set consent_version = null where display_name = '엄마'`);
+  await mom.goto(`${BASE}/words`);
+  await mom.waitForURL(/\/consent/);
+  await mom.getByLabel('모두 동의해요').check();
+  await mom.getByRole('button', { name: /동의하고 계속하기/ }).click();
+  await mom.waitForURL(`${BASE}/`);
+  log('재동의 게이트');
+
+  // 16. 공개 문서는 로그인 없이 열림
+  const anon = await browser.newContext();
+  const ap = await anon.newPage();
+  for (const path of ['/privacy', '/terms']) {
+    await ap.goto(`${BASE}${path}`);
+    if (!ap.url().endsWith(path)) throw new Error(`${path} 가 공개되지 않음`);
+  }
+  await anon.close();
+  log('처리방침·약관 공개 접근');
+
+  // 17. 자녀 프로필 삭제 (부모 모드, 이름 재입력)
+  const unlock = async (page) => {
+    await page.goto(`${BASE}/settings`);
+    if (await page.getByText('부모 모드가 켜져 있어요').count()) return;
+    await page.locator('input[name=pin]').first().fill('1234');
+    await page.getByRole('button', { name: /잠금 해제/ }).first().click();
+    await page.getByText('부모 모드가 켜져 있어요').waitFor();
+  };
+  await unlock(dad);
+  await unlock(mom);
+  await dad.goto(`${BASE}/settings`);
+  await dad.getByText('하준 프로필 삭제').click();
+  await dad.getByLabel(/이름 '하준'/).fill('하준');
+  await dad.getByRole('button', { name: '삭제', exact: true }).click();
+  await dad.getByText('하준의 프로필과 기록을 모두 삭제했어요.').waitFor();
+  if ((await db.query(`select 1 from public.learners where name = '하준'`)).rows.length) throw new Error('자녀 삭제 안 됨');
+  log('자녀 프로필 삭제');
+
+  // 18. 회원 탈퇴: 엄마(다른 부모 있음) → 본인만, 아빠(마지막) → 가족 전체
+  const withdraw = async (page, password = 'password123!') => {
+    await page.goto(`${BASE}/settings`);
+    await page.locator('#delete-account-title').click();
+    await page.getByLabel('현재 비밀번호').fill(password);
+    await page.getByLabel(/'탈퇴'라고 입력/).fill('탈퇴');
+    await page.getByRole('button', { name: '회원 탈퇴' }).click();
+  };
+  await withdraw(mom, 'wrong-password');
+  await mom.getByText('비밀번호가 맞지 않아요.').waitFor();
+  await withdraw(mom);
+  await mom.waitForURL(/\/login\?deleted=1/);
+  const fam = (await db.query(`select count(*)::int c from public.families`)).rows[0].c;
+  const authMom = (await db.query(`select count(*)::int c from auth.users where email = 'mom@test.local'`)).rows[0].c;
+  if (fam !== 1 || authMom !== 0) throw new Error(`엄마 탈퇴 이상 fam=${fam} auth=${authMom}`);
+  await withdraw(dad);
+  await dad.waitForURL(/\/login\?deleted=1/);
+  const remain = (await db.query(
+    `select (select count(*) from public.families)::int f, (select count(*) from public.words)::int w,
+            (select count(*) from auth.users)::int u`
+  )).rows[0];
+  if (remain.f !== 0 || remain.w !== 0 || remain.u !== 0) throw new Error(`가족 삭제 이상 ${JSON.stringify(remain)}`);
+  log('회원 탈퇴: 다른 부모 있으면 본인만, 마지막 부모면 가족·Auth 전체 삭제');
 
   console.log('\nbrowser errors:', errors.length ? errors : 'none');
   await browser.close();

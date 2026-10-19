@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { toAuthEmail } from '@/lib/domain/kidLogin';
@@ -165,6 +166,14 @@ export function LoginForm() {
           {pending ? '잠시만요…' : mode === 'signin' ? '로그인' : '가입하기'}
         </button>
 
+        {mode === 'signin' && (
+          <p className="text-center text-sm">
+            <Link href="/auth/forgot" className="text-slate-500 hover:text-slate-700 hover:underline">
+              비밀번호를 잊었어요
+            </Link>
+          </p>
+        )}
+
         {error && (
           <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
@@ -179,7 +188,16 @@ export function LoginForm() {
 
       {mode === 'signup' && (
         <p className="mt-4 text-xs text-slate-500">
-          가입 후 새 가족을 만들거나, 배우자에게 받은 초대코드로 같은 가족에 합류할 수 있어요.
+          가입 후 새 가족을 만들거나, 배우자에게 받은 초대코드로 같은 가족에 합류할 수 있어요. 가입하면 이메일이
+          계정 확인용으로 수집되며, 가족을 만들 때{' '}
+          <Link href="/terms" className="underline">
+            이용약관
+          </Link>
+          과{' '}
+          <Link href="/privacy" className="underline">
+            개인정보 처리방침
+          </Link>{' '}
+          동의를 받아요.
         </p>
       )}
     </div>

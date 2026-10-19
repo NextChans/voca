@@ -44,6 +44,7 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | `words` | family_id, learner_id, term, meaning, created_by, created_at | (learner_id, lower(term)) unique |
 | `tests` | learner_id, kind(regular/retest), mode(spelling/meaning/mixed), parent_test_id, status(in_progress/submitted/cancelled), week_start, total, correct | 자녀별 진행 중 1건(partial unique index) |
 | `test_items` | test_id, word_id, seq, direction, **term/meaning 스냅샷**, answer, is_correct, auto_correct, overridden_by/at | 감사 추적 |
+| `user_consents` | user_id, version, kinds[], agreed_at | 동의 이력(감사). `family_members.consent_version`에 최신 버전 |
 | `word_stats` (view) | word_id별 attempts, wrong_count | 제출된 시험만 |
 
 ## 4. 핵심 규칙과 위치
@@ -62,6 +63,9 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | 오답 연습 = 제출된 시험 문항 결과(정정 반영)에서 한 번이라도 틀린 단어. 클라이언트에서 채점·반복, 서버에 아무것도 기록하지 않음 | `buildPracticeWords`(`src/lib/domain/practice.ts`), `/practice` |
 | 새 단어 연습 = 비취소 정기 시험에 나온 적 없는 단어(등록 당일 포함). 진행 중 시험 문항은 제외돼 응시 중 정답 노출 경로가 되지 않음 | `buildNewWords`(`src/lib/domain/practice.ts`), `/practice?tab=new` |
 | 단어장 표시 순서 = 등록 순서(`created_at` 오름차순, 한 번에 저장한 단어는 1ms 간격 부여). 시험 문항 순서 = 무작위(`create_test`의 `order by random()`) | `repo.addWords` / `repo.listWords` |
+| 약관 동의 = 가족 생성·합류 시 필수 4항목(약관·처리방침·국외 이전·법정대리인), 버전이 바뀌면 `/consent` 재동의 | `record_consent`, `requireMember` 게이트, `src/lib/legal.ts` |
+| 회원 탈퇴 = 부모 모드 + 비밀번호 재확인 + '탈퇴' 입력. 다른 부모가 있으면 본인만, 마지막 부모면 가족 전체 + 자녀 계정 삭제(가족 행 잠금으로 동시 탈퇴 직렬화) | `delete_parent_account` → `repo.deleteParentAccount` |
+| 자녀 프로필 삭제 = 부모 모드 + 이름 재입력, 단어·시험 cascade + 자녀 Auth 계정 삭제 | `deleteLearnerAction` |
 | 단어 추가 = 누구나(자녀 포함), 수정·삭제 = 부모 모드 | `addWordsAction` / `updateWordAction` / `deleteWordsAction`(여러 개, 100개씩 나눠 DELETE, 최대 500, 서버 로그 `[words] delete`) |
 
 ## 5. 요청 흐름 예시: 시험

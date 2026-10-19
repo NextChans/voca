@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { DeleteAccountForm } from '@/components/DeleteAccountForm';
 import { lockParentAction, signOutAction } from '@/app/actions';
 import { requireMember } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
 import {
   CancelTestButton,
+  DeleteLearnerForm,
   InviteCreator,
   LearnerLoginForm,
   LearnerSettingsForm,
@@ -26,7 +29,9 @@ export default async function SettingsPage({
 }) {
   const { user, member } = await requireMember();
   const familyId = member.family_id;
-  const next = safeNext((await searchParams).next);
+  const sp = await searchParams;
+  const next = safeNext(sp.next);
+  const removed = typeof sp.removed === 'string' ? sp.removed.slice(0, 20) : null;
 
   const [pinState, parentMode] = await Promise.all([
     repo.getPinState(familyId),
@@ -44,6 +49,11 @@ export default async function SettingsPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">⚙️ 설정</h1>
+      {removed && (
+        <p role="status" className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {removed}의 프로필과 기록을 모두 삭제했어요.
+        </p>
+      )}
 
       {/* a. 부모 모드 (자녀 계정에는 표시하지 않음) */}
       {member.role === 'parent' && (
@@ -106,6 +116,9 @@ export default async function SettingsPage({
                       <LearnerSettingsForm learner={l} />
                       <div className="mt-4 border-t border-slate-100 pt-4">
                         <LearnerLoginForm learner={l} />
+                      </div>
+                      <div className="mt-4 border-t border-slate-100 pt-4">
+                        <DeleteLearnerForm learner={l} />
                       </div>
                       {test && (
                         <div className="mt-4 rounded-xl bg-amber-50 p-3">
@@ -171,6 +184,30 @@ export default async function SettingsPage({
           </button>
         </form>
       </section>
+
+      {/* f. 회원 탈퇴 (부모 모드에서만, 비밀번호 재확인) */}
+      {parentMode && member.role === 'parent' && (
+        <section id="delete-account" className="card space-y-3" aria-labelledby="delete-account-title">
+          <details>
+            <summary id="delete-account-title" className="cursor-pointer text-lg font-bold text-rose-700">
+              회원 탈퇴
+            </summary>
+            <div className="mt-3">
+              <DeleteAccountForm lastParent={members.length <= 1} />
+            </div>
+          </details>
+        </section>
+      )}
+
+      <p className="text-center text-xs text-slate-400">
+        <Link href="/terms" className="underline">
+          이용약관
+        </Link>{' '}
+        ·{' '}
+        <Link href="/privacy" className="underline">
+          개인정보 처리방침
+        </Link>
+      </p>
 
       {!parentMode && member.role === 'parent' && (
         <p className="text-center text-xs text-slate-400">

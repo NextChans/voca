@@ -40,6 +40,8 @@ UI 흐름을 바꿨다면 `e2e/README.md`의 Playwright E2E도 돌리세요.
 6. **시간 경계는 KST.** 주 시작은 월요일 00:00 KST, "등록 다음 날"도 KST 날짜 기준(`src/lib/domain/week.ts` ↔ SQL `kst_week_start()`). 둘을 항상 같이 바꿀 것.
 7. **자녀 계정은 부모 권한을 절대 갖지 않는다.** `isParentMode()`는 `role !== 'parent'`면 무조건 false. DB 트리거가 한 계정이 부모/자녀를 겸하지 못하게 막습니다.
 8. **비밀값을 커밋하지 않는다.** `.env*`는 gitignore. `NEXT_PUBLIC_*`에 서버 비밀을 넣지 말 것.
+9. **부모는 현재 버전 약관 동의가 있어야 이용 가능.** `requireMember()`가 `family_members.consent_version !== LEGAL_VERSION`이면 `/consent`로 보낸다. 처리방침·약관 문구를 바꾸면 `src/lib/legal.ts`의 `LEGAL_VERSION`을 올려 재동의를 받는다. 동의 이력은 `user_consents`(감사 추적), 기록은 DB 함수 `record_consent`로만.
+10. **탈퇴·삭제는 DB 함수가 원천.** `delete_parent_account`(마지막 부모면 가족 전체), 자녀 로그인 계정은 앱이 Auth Admin API로 삭제. 새 테이블을 만들면 가족 삭제 시 cascade 되는지 반드시 확인.
 
 ## 코드 지도
 
@@ -48,7 +50,10 @@ supabase/migrations/        스키마·RLS·트랜잭션 함수 (적용 순서 =
 src/proxy.ts                세션 쿠키 갱신 + 비로그인 리다이렉트
 src/app/actions.ts          모든 Server Action (zod 검증 → 인가 → repo)
 src/app/(app)/              로그인 후 화면: 홈, words, test, practice, results, settings, profiles
-src/app/login, onboarding   로그인(이메일 또는 자녀 아이디) / 가족 생성·합류
+src/app/login, onboarding   로그인(이메일 또는 자녀 아이디) / 가족 생성·합류(필수 동의 포함)
+src/app/consent             약관 재동의 (기존 가입자·문서 개정)
+src/app/privacy, terms      개인정보 처리방침·이용약관 (공개, 상수는 src/lib/legal.ts)
+src/app/auth/forgot, reset  부모 비밀번호 재설정
 src/app/api/tts             발음 합성 (문항 id 또는 텍스트)
 src/app/api/ocr             사진 → 단어 목록 (src/lib/server/ocr: Gemini → Claude 순)
 src/lib/domain/             순수 로직 (채점, 주차, 텍스트 파싱, PIN/토큰, 초대코드, 자녀 아이디)

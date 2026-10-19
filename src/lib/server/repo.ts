@@ -16,6 +16,8 @@ export interface Membership {
   /** parent: 가족 관리 가능한 부모 계정 / child: 특정 자녀에 고정된 자녀 계정 */
   role: 'parent' | 'child';
   learner_id: string | null;
+  /** 부모가 마지막으로 동의한 약관·처리방침 버전 (자녀 계정은 null — 부모가 대신 동의) */
+  consent_version: string | null;
 }
 export interface FamilyMember {
   user_id: string;
@@ -106,7 +108,7 @@ const db = () => supabaseAdmin();
 export async function getMembership(userId: string): Promise<Membership | null> {
   const { data, error } = await db()
     .from('family_members')
-    .select('family_id, display_name, families(name)')
+    .select('family_id, display_name, consent_version, families(name)')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) fail(error, 'getMembership');
@@ -118,6 +120,7 @@ export async function getMembership(userId: string): Promise<Membership | null> 
       family_name: fam?.name ?? '',
       role: 'parent',
       learner_id: null,
+      consent_version: data.consent_version ?? null,
     };
   }
 
@@ -136,6 +139,7 @@ export async function getMembership(userId: string): Promise<Membership | null> 
     family_name: fam?.name ?? '',
     role: 'child',
     learner_id: kid.id,
+    consent_version: null,
   };
 }
 
@@ -328,6 +332,41 @@ export async function removeLearnerLogin(familyId: string, learnerId: string): P
   if (unlinkError) fail(unlinkError, 'removeLearnerLogin(unlink)');
   const { error } = await db().auth.admin.deleteUser(learner.user_id);
   if (error) console.error('[repo] removeLearnerLogin auth delete failed (unlinked already)', error);
+}
+
+/** 자녀 프로필 삭제 (단어·시험 기록 cascade). 자녀 로그인 계정이 있으면 Auth 사용자도 삭제. */
+export async function deleteLearner(familyId: string, learnerId: string): Promise<void> {
+  const learner = await getLearnerAuth(familyId, learnerId);
+  if (!learner) return;
+  const { error } = await db().from('learners').delete().eq('family_id', familyId).eq('id', learnerId);
+  if (error) fail(error, 'deleteLearner');
+  if (learner.user_id) {
+    const { error: authError } = await db().auth.admin.deleteUser(learner.user_id);
+    // 프로필은 이미 지워졌으므로 고아 Auth 사용자는 로그인해도 소속이 없어 아무것도 볼 수 없다. 운영자 정리 대상으로 로그만 남김.
+    if (authError) console.error('[repo] deleteLearner auth delete failed', { userId: learner.user_id, authError });
+  }
+}
+
+// ================================================================ 동의 / 탈퇴
+
+export async function recordConsent(userId: string, version: string, kinds: readonly string[]): Promise<void> {
+  const { error } = await db().rpc('record_consent', { p_user_id: userId, p_version: version, p_kinds: kinds });
+  if (error) fail(error, 'recordConsent');
+}
+
+/**
+ * 부모 회원 탈퇴. DB 함수가 소속(마지막 부모면 가족 전체)을 지운 뒤, 자녀 로그인 계정과 본인 Auth 사용자를 삭제한다.
+ * Auth 삭제 실패는 데이터가 이미 지워진 뒤라 되돌리지 않고 로그로 남긴다(로그인해도 소속이 없어 온보딩으로 감).
+ */
+export async function deleteParentAccount(userId: string): Promise<{ familyDeleted: boolean; kidAccounts: number }> {
+  const { data, error } = await db().rpc('delete_parent_account', { p_user_id: userId });
+  if (error) fail(error, 'deleteParentAccount');
+  const result = data as { family_deleted: boolean; kid_user_ids: string[] };
+  for (const id of [...result.kid_user_ids, userId]) {
+    const { error: authError } = await db().auth.admin.deleteUser(id);
+    if (authError) console.error('[repo] deleteParentAccount auth delete failed', { userId: id, authError });
+  }
+  return { familyDeleted: result.family_deleted, kidAccounts: result.kid_user_ids.length };
 }
 
 async function getLearnerAuth(
