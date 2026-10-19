@@ -7,7 +7,7 @@
    │  ① Supabase Auth 만 직접 호출 (로그인/로그아웃, 세션 쿠키)
    │  ② 나머지는 전부 Next.js 서버로: Server Components / Server Actions / Route Handlers
    ▼
-Next.js 서버 (Vercel, icn1)  ── BFF
+Next.js 서버 (Vercel, syd1 = DB와 같은 리전)  ── BFF
    │  requireUser → getMembership(역할·family_id) → repo.* (service_role, family_id 필수)
    ▼
 Supabase Postgres  ── 테이블은 RLS 활성 + 정책 없음 + anon/authenticated 권한 회수
@@ -29,7 +29,7 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 - 역할 판정: `repo.getMembership(userId)` → `family_members`에 있으면 `parent`, `learners.user_id`에 있으면 `child`.
 - DB 트리거 `ensure_single_role`이 한 Auth 사용자가 부모·자녀를 겸하지 못하게 막습니다.
 - **부모 모드**: `families.parent_pin_hash`(scrypt). 잠금 해제 시 `voca_parent` 쿠키(HMAC-SHA256, `APP_SECRET`, 부모 user id에 바인딩, 30분).
-  PIN 5회 연속 실패 시 5분 잠금(`record_pin_attempt`). PIN이 아직 없으면 부모 계정은 부모 모드로 간주(설정 유도 배지 표시).
+  PIN 확인 전에 `reserve_pin_attempt`가 행 잠금으로 시도를 먼저 차감(병렬 시도 직렬화), 5회마다 5→10→20분… 지수 잠금, 성공 시 초기화. PIN이 아직 없으면 부모 계정은 부모 모드로 간주(설정 유도 배지 표시).
 - **가족 합류**: 부모가 초대코드 생성(8자, 72시간, 1회용, DB에는 sha256만) → 배우자가 가입 후 `join_family`.
 - **자녀 계정**: 부모가 설정에서 생성(`auth.admin.createUser`, `email_confirm: true`) → `learners.user_id/login_id` 연결. 연결 실패 시 Auth 사용자 삭제(보상 처리). 로그인 화면은 입력에 `@`가 없으면 아이디로 보고 가상 이메일로 변환(`src/lib/domain/kidLogin.ts`).
 
@@ -45,6 +45,7 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | `tests` | learner_id, kind(regular/retest), mode(spelling/meaning/mixed), parent_test_id, status(in_progress/submitted/cancelled), week_start, total, correct | 자녀별 진행 중 1건(partial unique index) |
 | `test_items` | test_id, word_id, seq, direction, **term/meaning 스냅샷**, answer, is_correct, auto_correct, overridden_by/at | 감사 추적 |
 | `user_consents` | user_id, version, kinds[], agreed_at | 동의 이력(감사). `family_members.consent_version`에 최신 버전 |
+| `usage_counters` | family_id, kind(ocr/tts), day(KST), count | 일일 사용량 |
 | `word_stats` (view) | word_id별 attempts, wrong_count | 제출된 시험만 |
 
 ## 4. 핵심 규칙과 위치
@@ -66,6 +67,8 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | 약관 동의 = 가족 생성·합류 시 필수 4항목(약관·처리방침·국외 이전·법정대리인), 버전이 바뀌면 `/consent` 재동의 | `record_consent`, `requireMember` 게이트, `src/lib/legal.ts` |
 | 회원 탈퇴 = 부모 모드 + 비밀번호 재확인 + '탈퇴' 입력. 다른 부모가 있으면 본인만, 마지막 부모면 가족 전체 + 자녀 계정 삭제(가족 행 잠금으로 동시 탈퇴 직렬화) | `delete_parent_account` → `repo.deleteParentAccount` |
 | 자녀 프로필 삭제 = 부모 모드 + 이름 재입력, 단어·시험 cascade + 자녀 Auth 계정 삭제 | `deleteLearnerAction` |
+| 사용 한도·데이터 상한 = 사진 인식 가족당 하루 10회, 서버 TTS 하루 500회(원자적 UPSERT, 외부 API 실패 시 환불), 자녀 4명·자녀당 단어 5,000개(문 단위 AFTER 트리거) | `consume_quota`/`refund_quota`, `enforce_*_cap`, `src/lib/limits.ts` |
+| 사람 확인(CAPTCHA) = Turnstile 토큰을 Supabase Auth 호출(signIn/signUp/reset, 탈퇴 시 비밀번호 재확인)에 전달. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 없으면 비활성 | `src/components/Turnstile.tsx`, `src/lib/captcha.ts` |
 | 단어 추가 = 누구나(자녀 포함), 수정·삭제 = 부모 모드 | `addWordsAction` / `updateWordAction` / `deleteWordsAction`(여러 개, 100개씩 나눠 DELETE, 최대 500, 서버 로그 `[words] delete`) |
 
 ## 5. 요청 흐름 예시: 시험
@@ -99,6 +102,7 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 
 ## 8. 보안 헤더 / 기타
 
-- `next.config.ts`: CSP(`connect-src`는 `NEXT_PUBLIC_SUPABASE_URL` 출처 + jsDelivr), X-Frame-Options DENY, Permissions-Policy(camera=self).
+- `next.config.ts`: CSP(`connect-src`는 `NEXT_PUBLIC_SUPABASE_URL` 출처 + jsDelivr + Cloudflare Turnstile, `frame-src` Turnstile), X-Frame-Options DENY, Permissions-Policy(camera=self).
 - `/api/tts`, `/api/ocr`: `sec-fetch-site` 교차 사이트 차단 + 로그인·가족 소속 확인.
+- 공개 페이지: `/welcome`(소개, 비로그인 루트 진입 시), `/login`, `/privacy`, `/terms`, `/auth/*`. Vercel Web Analytics(쿠키 없음) 루트 레이아웃에 포함.
 - PWA: `src/app/manifest.ts`, 아이콘 `src/app/icon.svg`(path만 사용) / `apple-icon.png` / `public/icon-*.png`.

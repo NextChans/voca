@@ -5,8 +5,8 @@
 | 항목 | 값 |
 | --- | --- |
 | 서비스 URL | https://voca-pink.vercel.app |
-| 호스팅 | Vercel (GitHub `NextChans/voca` main 브랜치 자동 배포, `vercel.json`: framework nextjs, region icn1) |
-| DB/Auth | Supabase 프로젝트 ref `juyduseodcrqfinsnqll` (`https://juyduseodcrqfinsnqll.supabase.co`), 리전 **ap-southeast-2 (시드니)** — 앱 서버(icn1)와 왕복 지연이 큼 |
+| 호스팅 | Vercel (GitHub `NextChans/voca` main 브랜치 자동 배포, `vercel.json`: framework nextjs, region **syd1** (2026-10-19, DB와 같은 시드니로 이동. 이전 icn1)) |
+| DB/Auth | Supabase 프로젝트 ref `juyduseodcrqfinsnqll` (`https://juyduseodcrqfinsnqll.supabase.co`), 리전 **ap-southeast-2 (시드니)**. 앱 서버도 syd1에 둬서 서버↔DB 왕복을 수 ms로 유지 (함수 리전을 옮기면 쿼리마다 대륙 간 왕복이 붙음) |
 | 사진 인식 | Gemini (`GEMINI_API_KEY`). Google Cloud 프로젝트에 결제 연결됨(2026-10-18) → 유료 등급(사진이 Google 학습에 쓰이지 않음, 소액 과금) |
 | 발음 | Google Cloud TTS (`GOOGLE_TTS_API_KEY`, 음성 `en-US-Neural2-F`), 운영 적용 확인(2026-10-18). Cloud 프로젝트 할당량 All requests per minute = 60 |
 | CI | GitHub Actions `.github/workflows/ci.yml` (PR·main push: typecheck → lint → test → build) |
@@ -24,7 +24,8 @@
 | `GEMINI_API_KEY` | Secret | 권장 | Google AI Studio 발급. 무료 등급은 입력 데이터가 Google 서비스 개선에 쓰일 수 있음 |
 | `GEMINI_MODEL` | Config | 선택 | 기본 `gemini-3.5-flash-lite` |
 | `ANTHROPIC_API_KEY` | Secret | 선택 | Gemini 키가 없을 때만 사용 |
-| `GOOGLE_TTS_API_KEY` | Secret | 권장(설정됨) | Cloud Text-to-Speech API로만 제한한 키. 설정 시 Cloud TTS만 사용(실패해도 비공식 폴백 없음 → `[api/tts] synthesis failed` 로그 + 502). 없으면 비공식 Google Translate TTS |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Config | 선택 | Cloudflare Turnstile 사이트 키. 설정하면 로그인·가입·비밀번호 재설정·탈퇴에 사람 확인 위젯. **Supabase CAPTCHA보다 먼저** 넣고 Redeploy |
+| `GOOGLE_TTS_API_KEY` | Secret | 권장(설정됨) | Cloud Text-to-Speech API로만 제한한 키. 실패 시 `[api/tts] synthesis failed` 로그 + 502. 없으면 서버 합성 불가(503) → 기기 음성만 |
 
 Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 반영됩니다.
 
@@ -36,6 +37,7 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
   (자녀 계정은 서버 admin API로 만들므로 가입 차단과 무관)
 - Data API(PostgREST): 켜져 있어야 함(서버가 supabase-js로 사용). Exposed schemas에 `public`
 - Project Settings → JWT Keys: Current 키가 **ECC (P-256, ES256)** 여야 함(2026-10-18 확인). proxy의 `getClaims()`가 이 공개키로 로컬 검증한다. 대칭키(HS256)로 바꾸면 기능은 그대로지만 매 요청 Auth 서버 왕복으로 느려진다. 키 회전 시 JWKS는 인스턴스별 메모리에 캐시되므로 이전 키를 잠시 Standby로 남길 것
+- Authentication → Providers → Email: **Secure password change** 켜기 (비밀번호 변경 시 재인증)
 - 기본 메일 발송은 제한적(시간당 소량). 인증 메일이 안 오면 Authentication → Users → Add user(Auto Confirm)로 생성 가능
 
 ## 배포 절차
@@ -47,7 +49,31 @@ Production·Preview 모두 체크. 환경변수 변경은 **Redeploy** 해야 �
    - 확인: 공개 키로 `GET /rest/v1/<table>?select=<새컬럼>` 시 `42703`(컬럼 없음)이 아니라 `42501`(권한 없음)이면 적용된 것
 3. 운영 적용 완료(2026-10-16): `20261016000000_init.sql`, `20261017000000_learner_login.sql`, `20261018000000_backfill_word_order.sql`(데이터 보정, 재실행 안전).
    운영 적용 완료(2026-10-19): `20261019000000_consent_and_account_deletion.sql` (PR #16).
+   운영 적용 완료(2026-10-19): `20261020000000_quotas_and_caps.sql` (PR #17, 한 트랜잭션, 기존 데이터 변경 없음).
+   공개 전 점검: 아래 쿼리 결과가 `kst_week_start` 하나뿐이어야 함 (브라우저 롤이 실행 가능한 함수)
+   `select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');`
    새 마이그레이션을 추가하면 이 목록에 적용 여부를 갱신하세요.
+
+## CAPTCHA (Cloudflare Turnstile) 켜기 — 순서 중요
+
+1. Cloudflare → Turnstile → Add widget: 호스트 `voca-pink.vercel.app`, Mode Managed. Site Key / Secret Key 확보
+2. Vercel `NEXT_PUBLIC_TURNSTILE_SITE_KEY` = Site Key (Production) → **Redeploy** → /login 에 위젯 보이는지 확인
+3. 그다음 Supabase → Authentication → Attack Protection → CAPTCHA 켜기(Turnstile, Secret Key)
+4. 부모 로그인·아이 아이디 로그인·가입·비밀번호 재설정·탈퇴 확인
+
+순서를 거꾸로 하면 모든 로그인이 실패한다. 되돌릴 때는 Supabase CAPTCHA 먼저 끄고 변수 제거.
+Preview 배포(`*.vercel.app` 다른 호스트)는 위젯 호스트에 없으면 로그인 불가 → Preview 는 위젯 호스트 추가 또는 사용 안 함.
+
+## 사용 한도 (src/lib/limits.ts ↔ DB)
+
+| 한도 | 값 | 위치 |
+| --- | --- | --- |
+| 사진 인식 | 가족당 하루 10회 (KST 자정 초기화, 실패 시 환불) | `consume_quota('ocr')`, `/api/ocr` 429 |
+| 서버 발음 합성 | 가족당 하루 500회 | `consume_quota('tts')`, `/api/tts` 429 |
+| 자녀 프로필 | 가족당 4명 | 트리거 `enforce_learner_cap` |
+| 단어 | 자녀당 5,000개 | 트리거 `enforce_word_cap` (동시 입력 시 소폭 초과 가능한 소프트 상한) |
+
+특정 가족 한도 조회: `select * from usage_counters where family_id = '<id>' order by day desc;`
 
 ## 빠른 점검
 

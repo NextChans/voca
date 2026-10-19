@@ -6,6 +6,7 @@ import { formatLegalDate, LEGAL_VERSION } from '@/lib/legal';
 import { requireUser } from '@/lib/server/auth';
 import { getMembershipOnce } from '@/lib/server/context';
 import { DeleteAccountForm } from '@/components/DeleteAccountForm';
+import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
 import { ConsentForm } from './ConsentForm';
 
@@ -17,7 +18,13 @@ export default async function ConsentPage() {
   const member = await getMembershipOnce(user.id);
   if (!member) redirect('/onboarding');
   if (member.role !== 'parent' || member.consent_version === LEGAL_VERSION) redirect('/');
-  const lastParent = (await repo.listMembers(member.family_id)).length <= 1;
+  const [members, pin, parentMode] = await Promise.all([
+    repo.listMembers(member.family_id),
+    repo.getPinState(member.family_id),
+    isParentMode(user.id, member.family_id),
+  ]);
+  const lastParent = members.length <= 1;
+  const needsPin = !!pin.parent_pin_hash && !parentMode;
 
   return (
     <main className="mx-auto max-w-xl px-4 py-10">
@@ -37,7 +44,7 @@ export default async function ConsentPage() {
       <details className="card mt-4">
         <summary className="cursor-pointer text-sm font-semibold text-slate-600">동의하지 않고 탈퇴할래요</summary>
         <div className="mt-3">
-          <DeleteAccountForm lastParent={lastParent} />
+          <DeleteAccountForm lastParent={lastParent} needsPin={needsPin} />
         </div>
       </details>
       <p className="mt-4 text-center text-xs text-slate-500">

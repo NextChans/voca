@@ -30,10 +30,11 @@ export async function extractWithClaude(apiKey: string, image: string, mediaType
     return res.parsed_output.words;
   } catch (e) {
     if (e instanceof OcrError) throw e;
-    if (e instanceof Anthropic.RateLimitError) throw new OcrError(429, '요청이 많아요. 잠시 후 다시 시도해 주세요.');
+    if (e instanceof Anthropic.RateLimitError) throw new OcrError(429, '요청이 많아요. 잠시 후 다시 시도해 주세요.', true);
     if (e instanceof Anthropic.APIError) {
       console.error('[ocr/claude] api error', e.status, e.message);
-      throw new OcrError(502, '사진 인식 서버에 문제가 있어요. 잠시 후 다시 시도해 주세요.');
+      const refundable = e.status === undefined || e.status >= 500 || [401, 403, 404, 429].includes(e.status);
+      throw new OcrError(502, '사진 인식 서버에 문제가 있어요. 잠시 후 다시 시도해 주세요.', refundable);
     }
     throw e;
   }

@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { Turnstile } from '@/components/Turnstile';
+import { CAPTCHA_ENABLED, CAPTCHA_FAILED_MESSAGE, CAPTCHA_WAITING_MESSAGE, TURNSTILE_SITE_KEY, isCaptchaError } from '@/lib/captcha';
 import { toAuthEmail } from '@/lib/domain/kidLogin';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -11,6 +13,7 @@ type Mode = 'signin' | 'signup';
 /** Supabase 영문 오류 → 친절한 한국어 */
 function friendlyError(message: string): string {
   const m = message.toLowerCase();
+  if (isCaptchaError(m)) return CAPTCHA_FAILED_MESSAGE;
   if (m.includes('invalid login credentials')) return '이메일(아이디) 또는 비밀번호가 맞지 않아요.';
   if (m.includes('email not confirmed')) return '아직 이메일 인증을 하지 않았어요. 메일함에서 인증 링크를 눌러주세요.';
   if (m.includes('already registered') || m.includes('already been registered'))
@@ -30,6 +33,10 @@ export function LoginForm() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // CAPTCHA 토큰은 1회용: 시도할 때마다 captchaKey 를 올려 위젯을 다시 띄운다
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
+  const needsCaptcha = CAPTCHA_ENABLED && !captchaToken;
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -50,11 +57,21 @@ export function LoginForm() {
       return;
     }
 
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setError(CAPTCHA_WAITING_MESSAGE);
+      return;
+    }
+    const captchaOptions = captchaToken ? { captchaToken } : {};
+
     setPending(true);
     try {
       const supabase = createSupabaseBrowserClient();
       if (mode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email: toAuthEmail(email), password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: toAuthEmail(email),
+          password,
+          options: captchaOptions,
+        });
         if (error) {
           setError(friendlyError(error.message));
           return;
@@ -65,7 +82,7 @@ export function LoginForm() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${location.origin}/auth/callback`, ...captchaOptions },
         });
         if (error) {
           setError(friendlyError(error.message));
@@ -82,6 +99,10 @@ export function LoginForm() {
       setError(friendlyError(err instanceof Error ? err.message : ''));
     } finally {
       setPending(false);
+      if (CAPTCHA_ENABLED) {
+        setCaptchaToken(null);
+        setCaptchaKey((k) => k + 1);
+      }
     }
   };
 
@@ -162,8 +183,12 @@ export function LoginForm() {
           </div>
         )}
 
-        <button type="submit" className="btn-primary w-full py-3 text-base" disabled={pending}>
-          {pending ? '잠시만요…' : mode === 'signin' ? '로그인' : '가입하기'}
+        {CAPTCHA_ENABLED && (
+          <Turnstile key={`${mode}-${captchaKey}`} siteKey={TURNSTILE_SITE_KEY} onToken={setCaptchaToken} />
+        )}
+
+        <button type="submit" className="btn-primary w-full py-3 text-base" disabled={pending || needsCaptcha}>
+          {pending ? '잠시만요…' : needsCaptcha ? CAPTCHA_WAITING_MESSAGE : mode === 'signin' ? '로그인' : '가입하기'}
         </button>
 
         {mode === 'signin' && (

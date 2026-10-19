@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { safeInternalPath } from '@/lib/domain/safePath';
 import { DeleteAccountForm } from '@/components/DeleteAccountForm';
 import { lockParentAction, signOutAction } from '@/app/actions';
 import { requireMember } from '@/lib/server/context';
@@ -18,8 +19,7 @@ import {
 export const metadata: Metadata = { title: '설정' };
 
 function safeNext(next: string | string[] | undefined): string {
-  const v = Array.isArray(next) ? next[0] : next;
-  return v && v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\') ? v : '/settings';
+  return safeInternalPath(Array.isArray(next) ? next[0] : next, '/settings');
 }
 
 export default async function SettingsPage({
@@ -31,7 +31,7 @@ export default async function SettingsPage({
   const familyId = member.family_id;
   const sp = await searchParams;
   const next = safeNext(sp.next);
-  const removed = typeof sp.removed === 'string' ? sp.removed.slice(0, 20) : null;
+  const removed = sp.removed === '1';
 
   const [pinState, parentMode] = await Promise.all([
     repo.getPinState(familyId),
@@ -51,7 +51,7 @@ export default async function SettingsPage({
       <h1 className="text-2xl font-bold">⚙️ 설정</h1>
       {removed && (
         <p role="status" className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          {removed}의 프로필과 기록을 모두 삭제했어요.
+          자녀 프로필과 기록을 모두 삭제했어요.
         </p>
       )}
 

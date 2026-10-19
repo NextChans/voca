@@ -186,6 +186,37 @@ describe('consent / account deletion', () => {
   });
 });
 
+describe('quotas / caps', () => {
+  beforeEach(setup);
+
+  it('일일 한도까지만 증가하고 넘으면 QUOTA_EXCEEDED, 환불하면 다시 쓸 수 있다', async () => {
+    const { family } = await createFamilyWithLearner();
+    for (let i = 1; i <= 3; i++) {
+      const r = await one<{ c: number }>(`select public.consume_quota($1, 'ocr', 3) as c`, [family]);
+      expect(r.c).toBe(i);
+    }
+    await expectError(db.query(`select public.consume_quota($1, 'ocr', 3)`, [family]), 'QUOTA_EXCEEDED');
+    // 종류별로 따로 센다
+    expect((await one<{ c: number }>(`select public.consume_quota($1, 'tts', 3) as c`, [family])).c).toBe(1);
+    await db.query(`select public.refund_quota($1, 'ocr')`, [family]);
+    expect((await one<{ c: number }>(`select public.consume_quota($1, 'ocr', 3) as c`, [family])).c).toBe(3);
+  });
+
+  it('가족당 자녀 4명, 자녀당 단어 5,000개를 넘으면 문 전체가 거부된다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await db.query(`insert into public.learners (family_id, name) values ($1, '둘째'), ($1, '셋째'), ($1, '넷째')`, [family]);
+    await expectError(
+      db.query(`insert into public.learners (family_id, name) values ($1, '다섯째')`, [family]),
+      'LEARNER_LIMIT'
+    );
+    await addWords(family, learner, 4999, 1);
+    await expectError(addWords(family, learner, 2, 1, 'x'), 'WORD_LIMIT');
+    expect((await q(`select 1 from public.words where learner_id = $1`, [learner])).length).toBe(4999);
+    await addWords(family, learner, 1, 1, 'y');
+    expect((await q(`select 1 from public.words where learner_id = $1`, [learner])).length).toBe(5000);
+  });
+});
+
 describe('create_test (regular)', () => {
   beforeEach(setup);
 
@@ -347,13 +378,30 @@ describe('submit / retest / override', () => {
     expect(reverted.overridden_by).toBeNull();
   });
 
-  it('PIN 5회 연속 실패 시 5분 잠금', async () => {
+  it('PIN 시도는 확인 전에 차감되고, 5회마다 5분·10분… 지수 잠금, 성공하면 초기화', async () => {
     const { family } = await createFamilyWithLearner();
-    for (let i = 0; i < 4; i++) {
-      const r = await one<{ l: string | null }>(`select public.record_pin_attempt($1, false) as l`, [family]);
-      expect(r.l).toBeNull();
-    }
-    const locked = await one<{ l: string | null }>(`select public.record_pin_attempt($1, false) as l`, [family]);
-    expect(locked.l).not.toBeNull();
+    const lockMinutes = async () =>
+      (
+        await one<{ m: number }>(
+          `select round(extract(epoch from pin_locked_until - now()) / 60)::int as m from public.families where id = $1`,
+          [family]
+        )
+      ).m;
+    for (let i = 0; i < 5; i++) await db.query(`select public.reserve_pin_attempt($1)`, [family]);
+    expect(await lockMinutes()).toBe(5);
+    await expectError(db.query(`select public.reserve_pin_attempt($1)`, [family]), 'PIN_LOCKED');
+
+    // 잠금 만료 후 다시 5회 실패 → 10분
+    await db.query(`update public.families set pin_locked_until = now() - interval '1 second' where id = $1`, [family]);
+    for (let i = 0; i < 5; i++) await db.query(`select public.reserve_pin_attempt($1)`, [family]);
+    expect(await lockMinutes()).toBe(10);
+
+    // 성공하면 잠금 단계까지 초기화
+    await db.query(`select public.record_pin_attempt($1, true)`, [family]);
+    const f = await one<{ c: number; l: number; u: string | null }>(
+      `select pin_failed_count c, pin_lock_count l, pin_locked_until u from public.families where id = $1`,
+      [family]
+    );
+    expect(f).toEqual({ c: 0, l: 0, u: null });
   });
 });

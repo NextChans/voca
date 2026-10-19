@@ -1,4 +1,5 @@
 import 'server-only';
+import { MAX_LEARNERS_PER_FAMILY, MAX_WORDS_PER_LEARNER } from '@/lib/limits';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Direction } from '@/lib/domain/grading';
 import type { TestKind, TestMode, TestStatus } from '@/lib/domain/types';
@@ -91,6 +92,10 @@ const RPC_ERRORS: Record<string, string> = {
   ITEM_NOT_FOUND: '문항을 찾을 수 없어요.',
   ACCOUNT_IS_LEARNER: '자녀 계정으로는 가족을 만들거나 합류할 수 없어요.',
   ACCOUNT_IS_PARENT: '부모 계정은 자녀 계정으로 쓸 수 없어요.',
+  LEARNER_LIMIT: `자녀 프로필은 가족당 ${MAX_LEARNERS_PER_FAMILY}명까지 만들 수 있어요.`,
+  WORD_LIMIT: `단어는 아이 한 명당 ${MAX_WORDS_PER_LEARNER.toLocaleString()}개까지 저장할 수 있어요.`,
+  PIN_LOCKED: '여러 번 틀려서 잠시 잠겼어요. 잠시 후 다시 시도해 주세요.',
+  QUOTA_EXCEEDED: '오늘 쓸 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
 };
 
 function fail(error: { message: string; code?: string } | null, context: string): never {
@@ -209,13 +214,16 @@ export async function setPinHash(familyId: string, hash: string): Promise<void> 
 }
 
 /** 반환: 이번 시도로 잠긴 경우 잠금 해제 시각 */
-export async function recordPinAttempt(familyId: string, success: boolean): Promise<string | null> {
-  const { data, error } = await db().rpc('record_pin_attempt', {
-    p_family_id: familyId,
-    p_success: success,
-  });
-  if (error) fail(error, 'recordPinAttempt');
-  return (data as string | null) ?? null;
+/** PIN 확인 "전에" 시도 1회 차감 (행 잠금으로 병렬 요청 직렬화). 잠겨 있으면 DomainError(PIN_LOCKED). */
+export async function reservePinAttempt(familyId: string): Promise<void> {
+  const { error } = await db().rpc('reserve_pin_attempt', { p_family_id: familyId });
+  if (error) fail(error, 'reservePinAttempt');
+}
+
+/** PIN 확인 성공 → 실패 횟수·잠금 초기화 */
+export async function recordPinSuccess(familyId: string): Promise<void> {
+  const { error } = await db().rpc('record_pin_attempt', { p_family_id: familyId, p_success: true });
+  if (error) fail(error, 'recordPinSuccess');
 }
 
 // ================================================================ 자녀
@@ -345,6 +353,21 @@ export async function deleteLearner(familyId: string, learnerId: string): Promis
     // 프로필은 이미 지워졌으므로 고아 Auth 사용자는 로그인해도 소속이 없어 아무것도 볼 수 없다. 운영자 정리 대상으로 로그만 남김.
     if (authError) console.error('[repo] deleteLearner auth delete failed', { userId: learner.user_id, authError });
   }
+}
+
+// ================================================================ 사용 한도
+
+/** 오늘(KST) 사용량 1 증가. 한도 초과면 DomainError(QUOTA_EXCEEDED). 원자적 UPSERT. */
+export async function consumeQuota(familyId: string, kind: 'ocr' | 'tts', limit: number): Promise<number> {
+  const { data, error } = await db().rpc('consume_quota', { p_family_id: familyId, p_kind: kind, p_limit: limit });
+  if (error) fail(error, 'consumeQuota');
+  return data as number;
+}
+
+/** 외부 API 실패 등으로 쓰지 못한 1회 환불 (실패해도 사용자 흐름은 막지 않음) */
+export async function refundQuota(familyId: string, kind: 'ocr' | 'tts'): Promise<void> {
+  const { error } = await db().rpc('refund_quota', { p_family_id: familyId, p_kind: kind });
+  if (error) console.error('[repo] refundQuota failed', { familyId, kind, error });
 }
 
 // ================================================================ 동의 / 탈퇴
