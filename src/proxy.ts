@@ -11,7 +11,7 @@ import { publicEnv } from '@/lib/env';
  * getSession 이 refresh token 으로 갱신해 setAll 로 쿠키에 다시 쓴다.
  * 폐기된 세션까지 확인하는 getUser() 는 서버 쪽 requireUser() 에서 요청당 1회만 한다.
  */
-const PUBLIC_PATHS = new Set(['/login', '/privacy', '/terms']);
+const PUBLIC_PATHS = new Set(['/login', '/welcome', '/privacy', '/terms']);
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -39,7 +39,8 @@ export async function proxy(request: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    // 첫 방문(루트)은 서비스 소개, 그 외 보호된 경로는 로그인으로
+    url.pathname = pathname === '/' ? '/welcome' : '/login';
     url.search = '';
     return NextResponse.redirect(url);
   }

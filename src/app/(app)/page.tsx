@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireLearner } from '@/lib/server/context';
 import * as repo from '@/lib/server/repo';
 import { formatKst, isTestableWord, kstWeekStart, weekRangeLabel } from '@/lib/domain/week';
+import { GettingStarted } from './_components/GettingStarted';
 
 type Status =
   | { kind: 'in_progress'; testId: string }
@@ -13,12 +14,15 @@ export default async function HomePage() {
   const { member, learner } = await requireLearner();
   const familyId = member.family_id;
 
-  const [used, words, testedIds, inProgress, recent] = await Promise.all([
+  const isParent = member.role === 'parent';
+  const [used, words, testedIds, inProgress, recent, pinState] = await Promise.all([
     repo.countRegularTestsThisWeek(familyId, learner.id),
     repo.listWords(familyId, learner.id),
     repo.listRegularTestedWordIds(familyId, learner.id),
     repo.getInProgressTest(familyId, learner.id),
     repo.listTests(familyId, learner.id, { status: 'submitted', limit: 5 }),
+    // 시작 가이드의 'PIN 정하기' 단계는 부모 계정에만 보이므로 자녀 계정에선 조회하지 않는다.
+    isParent ? repo.getPinState(familyId) : Promise.resolve(null),
   ]);
 
   const now = new Date();
@@ -46,6 +50,15 @@ export default async function HomePage() {
       <h1 className="text-2xl font-bold">
         <span aria-hidden>{learner.avatar}</span> {learner.name}, 안녕! 오늘도 화이팅 💪
       </h1>
+
+      <GettingStarted
+        learnerName={learner.name}
+        isParent={isParent}
+        hasPin={Boolean(pinState?.parent_pin_hash)}
+        wordCount={words.length}
+        minWords={minWords}
+        hasSubmittedTest={recent.length > 0}
+      />
 
       <section className="card space-y-4" aria-labelledby="week-title">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -77,10 +77,11 @@ export async function extractWithGemini(
 
       console.error('[ocr/gemini] api error', { model: current, structured, status: e.status, message: e.message });
       if (e.status === 429) {
-        throw new OcrError(429, '무료 사용량을 넘었거나 요청이 많아요. 잠시 후 다시 시도해 주세요. (Gemini 429)');
+        throw new OcrError(429, '요청이 많아요. 잠시 후 다시 시도해 주세요. (Gemini 429)', true);
       }
       if (e.status === 401 || e.status === 403 || /api key|API_KEY/i.test(e.message)) {
-        throw new OcrError(502, `AI 키가 올바르지 않아요. Vercel 의 GEMINI_API_KEY 를 확인해 주세요. (Gemini ${e.status})`);
+        // 설정 정보는 로그에만 (사용자에게는 일반 문구)
+        throw new OcrError(502, `사진 인식 서버 설정에 문제가 있어요. 관리자에게 알려 주세요. (Gemini ${e.status})`, true);
       }
       // 구조화 출력 옵션 거부 → 같은 모델로 옵션 없이 재시도
       if (e.status === 400 && structured && /schema|response_?json|responseJsonSchema|mime/i.test(e.message)) {
@@ -98,5 +99,6 @@ export async function extractWithGemini(
   }
 
   const status = lastError instanceof ApiError ? lastError.status : 'unknown';
-  throw new OcrError(502, `사진 인식 서버에 문제가 있어요. 잠시 후 다시 시도해 주세요. (Gemini ${status})`);
+  const refundable = typeof status !== 'number' || status >= 500 || [401, 403, 404, 429].includes(status);
+  throw new OcrError(502, `사진 인식 서버에 문제가 있어요. 잠시 후 다시 시도해 주세요. (Gemini ${status})`, refundable);
 }

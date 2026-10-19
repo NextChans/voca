@@ -1,9 +1,10 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { issueUnlockToken, verifyUnlockToken } from '@/lib/domain/parentToken';
+import { issueUnlockToken, isValidPin, verifyUnlockToken } from '@/lib/domain/parentToken';
 import { serverEnv } from '@/lib/server/env';
 import { getMembershipOnce } from '@/lib/server/context';
-import { getPinState } from '@/lib/server/repo';
+import { verifyPin } from '@/lib/domain/parentToken';
+import { getPinState, recordPinSuccess, reservePinAttempt } from '@/lib/server/repo';
 
 const COOKIE = 'voca_parent';
 const TTL_MS = 30 * 60 * 1000;
@@ -25,6 +26,19 @@ export async function isParentMode(
   if (!parent_pin_hash) return true;
   const token = (await cookies()).get(COOKIE)?.value;
   return verifyUnlockToken(token, userId, serverEnv.appSecret());
+}
+
+/**
+ * 부모 PIN 확인. 시도 1회를 먼저 차감(잠금 중이면 DomainError)한 뒤 검증하고, 맞으면 초기화한다.
+ * PIN 이 없는 가족이면 null (호출 측에서 PIN 설정 유도).
+ */
+export async function verifyParentPin(familyId: string, pin: string): Promise<boolean | null> {
+  const { parent_pin_hash } = await getPinState(familyId);
+  if (!parent_pin_hash) return null;
+  await reservePinAttempt(familyId);
+  const ok = isValidPin(pin) && verifyPin(pin, parent_pin_hash);
+  if (ok) await recordPinSuccess(familyId);
+  return ok;
 }
 
 export async function requireParent(userId: string, familyId: string): Promise<void> {

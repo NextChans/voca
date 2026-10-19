@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatLegalDate, LEGAL_VERSION } from '@/lib/legal';
+import { formatLegalDate, LEGAL_EFFECTIVE_DATE } from '@/lib/legal';
 
 type Props = {
   title: string;
@@ -23,7 +23,7 @@ export function LegalDoc({ title, other, children }: Props) {
       <main className="card space-y-8 leading-relaxed text-slate-700">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-          <p className="mt-1 text-sm text-slate-500">시행일: {formatLegalDate(LEGAL_VERSION)}</p>
+          <p className="mt-1 text-sm text-slate-500">시행일: {formatLegalDate(LEGAL_EFFECTIVE_DATE)}</p>
         </div>
         {children}
       </main>

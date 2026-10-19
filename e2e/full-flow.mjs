@@ -29,7 +29,10 @@ function log(...a) {
 }
 
 async function login(page, email) {
+  // 비로그인 루트는 소개 페이지 → '무료로 시작하기'로 로그인 화면
   await page.goto(`${BASE}/`);
+  await page.waitForURL(/\/welcome/);
+  await page.getByRole('link', { name: /무료로 시작하기/ }).first().click();
   await page.waitForURL(/\/login/);
   await page.locator('input[name=email]').fill(email);
   await page.locator('input[name=password]').first().fill('password123!');
@@ -328,7 +331,7 @@ async function main() {
   await dad.getByText('하준 프로필 삭제').click();
   await dad.getByLabel(/이름 '하준'/).fill('하준');
   await dad.getByRole('button', { name: '삭제', exact: true }).click();
-  await dad.getByText('하준의 프로필과 기록을 모두 삭제했어요.').waitFor();
+  await dad.getByText('자녀 프로필과 기록을 모두 삭제했어요.').waitFor();
   if ((await db.query(`select 1 from public.learners where name = '하준'`)).rows.length) throw new Error('자녀 삭제 안 됨');
   log('자녀 프로필 삭제');
 

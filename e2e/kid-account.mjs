@@ -117,7 +117,7 @@ try {
   await dad.getByText('지우 프로필 삭제').click();
   await dad.getByLabel(/이름 '지우'/).fill('지우');
   await dad.getByRole('button', { name: '삭제', exact: true }).click();
-  await dad.getByText('지우의 프로필과 기록을 모두 삭제했어요.').waitFor();
+  await dad.getByText('자녀 프로필과 기록을 모두 삭제했어요.').waitFor();
   const kid3 = await (await browser.newContext()).newPage();
   await kid3.goto(`${BASE}/login`);
   await kid3.locator('input[name=email]').fill('jiwoo');

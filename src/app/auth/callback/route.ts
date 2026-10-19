@@ -1,11 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { safeInternalPath } from '@/lib/domain/safePath';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-/** 같은 사이트 내부 경로만 허용 (오픈 리다이렉트 방지) */
-function safeNext(next: string | null): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/';
-  return next;
-}
+const safeNext = (next: string | null) => safeInternalPath(next, '/');
 
 /** 이메일 인증 링크 → 세션 교환 후 이동 */
 export async function GET(request: NextRequest) {

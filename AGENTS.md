@@ -74,4 +74,7 @@ docs/                       ARCHITECTURE / OPERATIONS / HISTORY
 - **서버 액션 후 `router.refresh()` 금지.** 액션이 `revalidatePath`를 부르면 응답에 갱신된 화면이 이미 담겨 온다. refresh는 서버 렌더를 한 번 더 돌릴 뿐이다.
 - **상태를 바꾸는 서버 액션은 `revalidatePath('/', 'layout')` 필수** (redirect 하는 액션 포함). `next.config.ts`의 `staleTimes.dynamic`(10초) 때문에 빠뜨리면 이전 화면 캐시가 재사용된다. `tests/actionsRevalidate.test.ts`가 검사한다.
 - 인증 확인은 `src/proxy.ts`에서 `getClaims()`(JWT 로컬 검증, ES256), 페이지·액션의 `requireUser()`에서 `getUser()`(Auth 서버, 요청당 1회). proxy에 `getUser()`를 다시 넣지 말 것(탭 프리페치마다 Auth 왕복 발생).
+- **리다이렉트 대상은 `safeInternalPath()`로만** (`src/lib/domain/safePath.ts`). `startsWith('/')` 문자열 검사는 `/\t/evil.com` 같은 우회에 뚫린다.
+- 외부 유료 API 호출은 `consume_quota` 로 먼저 차감하고, **공급자가 처리하지 않은 실패만** 환불(`OcrError.refundable`). 거부·토큰 초과 등은 환불 금지(일부러 일으켜 한도 우회 가능).
+- 부모 PIN 확인은 `verifyParentPin()`만 사용 (확인 전에 시도 차감, 지수 잠금). 새 SQL 함수는 `security definer` 쓰지 말고(service_role 로만 호출) 마이그레이션은 `begin; … commit;`.
 - 운영 상태 점검·장애 대응은 `docs/OPERATIONS.md`.

@@ -5,8 +5,13 @@ export const SERVICE_NAME = 'voca';
 
 export const OPERATOR = { name: '장현찬', email: 'babadung@gmail.com' } as const;
 
-/** 동의 버전이자 시행일(YYYY-MM-DD, KST). 문서를 바꾸면 올린다. */
-export const LEGAL_VERSION = '2026-10-19';
+/** 문서 시행일(YYYY-MM-DD, KST) */
+export const LEGAL_EFFECTIVE_DATE = '2026-10-19';
+/**
+ * 동의 버전. 처리방침·약관 내용을 바꾸면 반드시 올린다 → 부모 전원 /consent 재동의.
+ * 이력: 2026-10-19(최초) → 2026-10-19.2(국외 이전에 Cloudflare Turnstile, Vercel 방문 통계·시드니 리전 추가)
+ */
+export const LEGAL_VERSION = '2026-10-19.2';
 
 // Supabase 대시보드(Project Settings → General) 기준 DB 리전 (2026-10-19 확인)
 export const SUPABASE_REGION = '호주 시드니(AWS ap-southeast-2)';
@@ -22,7 +27,7 @@ export const CONSENT_LABELS: Record<ConsentKind, string> = {
 };
 
 /** '2026-10-19' → '2026년 10월 19일' */
-export function formatLegalDate(version: string = LEGAL_VERSION): string {
+export function formatLegalDate(version: string = LEGAL_EFFECTIVE_DATE): string {
   const [y, m, d] = version.split('-').map(Number);
   return `${y}년 ${m}월 ${d}일`;
 }

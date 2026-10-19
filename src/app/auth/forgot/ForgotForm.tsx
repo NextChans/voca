@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { Turnstile } from '@/components/Turnstile';
+import { CAPTCHA_ENABLED, CAPTCHA_FAILED_MESSAGE, CAPTCHA_WAITING_MESSAGE, TURNSTILE_SITE_KEY, isCaptchaError } from '@/lib/captcha';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 const SENT_MESSAGE = '입력한 이메일로 재설정 링크를 보냈어요. 메일의 링크는 이 브라우저에서 열어 주세요.';
@@ -8,6 +10,7 @@ const SENT_MESSAGE = '입력한 이메일로 재설정 링크를 보냈어요. �
 /** 계정 존재 여부가 드러나지 않도록, 속도 제한·네트워크 오류 외에는 모두 같은 성공 문구를 보여준다. */
 function friendlyError(message: string): string | null {
   const m = message.toLowerCase();
+  if (isCaptchaError(m)) return CAPTCHA_FAILED_MESSAGE;
   if (m.includes('rate limit') || m.includes('too many') || m.includes('security purposes'))
     return '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.';
   if (m.includes('fetch') || m.includes('network')) return '인터넷 연결을 확인해 주세요.';
@@ -19,6 +22,10 @@ export function ForgotForm() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // CAPTCHA 토큰은 1회용: 요청할 때마다 captchaKey 를 올려 위젯을 다시 띄운다
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
+  const needsCaptcha = CAPTCHA_ENABLED && !captchaToken;
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -31,11 +38,17 @@ export function ForgotForm() {
       return;
     }
 
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setError(CAPTCHA_WAITING_MESSAGE);
+      return;
+    }
+
     setPending(true);
     try {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${location.origin}/auth/callback?next=/auth/reset`,
+        ...(captchaToken ? { captchaToken } : {}),
       });
       const friendly = error ? friendlyError(error.message) : null;
       if (friendly) setError(friendly);
@@ -45,6 +58,10 @@ export function ForgotForm() {
       setError(friendly ?? '잠시 후 다시 시도해 주세요.');
     } finally {
       setPending(false);
+      if (CAPTCHA_ENABLED) {
+        setCaptchaToken(null);
+        setCaptchaKey((k) => k + 1);
+      }
     }
   };
 
@@ -70,8 +87,10 @@ export function ForgotForm() {
           />
         </div>
 
-        <button type="submit" className="btn-primary w-full py-3 text-base" disabled={pending}>
-          {pending ? '잠시만요…' : '재설정 링크 받기'}
+        {CAPTCHA_ENABLED && <Turnstile key={captchaKey} siteKey={TURNSTILE_SITE_KEY} onToken={setCaptchaToken} />}
+
+        <button type="submit" className="btn-primary w-full py-3 text-base" disabled={pending || needsCaptcha}>
+          {pending ? '잠시만요…' : needsCaptcha ? CAPTCHA_WAITING_MESSAGE : '재설정 링크 받기'}
         </button>
 
         {error && (

@@ -12,7 +12,8 @@ import {
   normalizeInviteCode,
 } from '@/lib/domain/invite';
 import { isValidLoginId, loginIdToEmail, MIN_KID_PASSWORD, normalizeLoginId } from '@/lib/domain/kidLogin';
-import { hashPin, isValidPin, verifyPin } from '@/lib/domain/parentToken';
+import { hashPin, isValidPin } from '@/lib/domain/parentToken';
+import { safeInternalPath } from '@/lib/domain/safePath';
 import { requireUser } from '@/lib/server/auth';
 import {
   clearSelectedLearner,
@@ -24,8 +25,10 @@ import {
 import {
   clearParentUnlocked,
   ParentLockedError,
+  isParentMode,
   requireParent,
   setParentUnlocked,
+  verifyParentPin,
 } from '@/lib/server/parent';
 import { CONSENT_KINDS, LEGAL_VERSION } from '@/lib/legal';
 import * as repo from '@/lib/server/repo';
@@ -138,21 +141,14 @@ export async function unlockParentAction(_: ActionState, formData: FormData): Pr
   const { user, member } = await requireMember();
   const result = await run(async () => {
     if (member.role !== 'parent') return { error: '자녀 계정에서는 부모 모드를 켤 수 없어요.' };
-    const pin = String(formData.get('pin') ?? '');
-    const state = await repo.getPinState(member.family_id);
-    if (!state.parent_pin_hash) return { message: '아직 PIN이 없어요. 아래에서 먼저 설정해 주세요.' };
-    if (state.pin_locked_until && Date.parse(state.pin_locked_until) > Date.now()) {
-      return { error: '여러 번 틀려서 잠시 잠겼어요. 5분 뒤에 다시 시도해 주세요.' };
-    }
-    const ok = isValidPin(pin) && verifyPin(pin, state.parent_pin_hash);
-    const lockedUntil = await repo.recordPinAttempt(member.family_id, ok);
-    if (!ok) return { error: lockedUntil ? '5번 틀려서 5분 동안 잠겼어요.' : 'PIN이 맞지 않아요.' };
+    const ok = await verifyParentPin(member.family_id, String(formData.get('pin') ?? ''));
+    if (ok === null) return { message: '아직 PIN이 없어요. 아래에서 먼저 설정해 주세요.' };
+    if (!ok) return { error: 'PIN이 맞지 않아요. (5번 틀리면 잠시 잠겨요)' };
     await setParentUnlocked(user.id);
   });
   if (result.error || result.message) return result;
   revalidatePath('/', 'layout');
-  const next = String(formData.get('next') ?? '');
-  redirect(next.startsWith('/') && !next.startsWith('//') ? next : '/settings');
+  redirect(safeInternalPath(formData.get('next'), '/settings'));
 }
 
 export async function lockParentAction(): Promise<void> {
@@ -277,7 +273,8 @@ export async function deleteLearnerAction(_: ActionState, formData: FormData): P
   if (result.error || !deletedName) return result;
   revalidatePath('/', 'layout');
   // 삭제된 자녀의 폼은 화면에서 사라지므로 결과는 설정 화면 상단에 표시
-  redirect(`/settings?removed=${encodeURIComponent(deletedName)}`);
+  // 이름은 URL·방문 통계에 남지 않도록 플래그만
+  redirect('/settings?removed=1');
 }
 
 // ================================================================ 동의 / 탈퇴
@@ -307,16 +304,29 @@ export async function deleteAccountAction(_: ActionState, formData: FormData): P
     if (member?.role === 'child') return { error: '아이 계정은 부모님이 설정에서 지울 수 있어요.' };
     if (String(formData.get('confirm') ?? '').trim() !== '탈퇴') return { error: "확인 칸에 '탈퇴'라고 입력해 주세요." };
     if (!user.email) return { error: '계정 정보를 확인할 수 없어요.' };
+    // 부모 PIN 이 있으면 부모 모드이거나 PIN 을 함께 입력해야 한다
+    // (부모 계정으로 로그인된 기기를 아이가 쓰는 상황에서 가족 전체 삭제 방지)
+    if (member && !(await isParentMode(user.id, member.family_id))) {
+      const pinOk = await verifyParentPin(member.family_id, String(formData.get('pin') ?? ''));
+      if (pinOk === false) return { error: '부모 PIN이 맞지 않아요. (5번 틀리면 잠시 잠겨요)' };
+    }
     // 비밀번호 재확인: 세션을 저장하지 않는 별도 클라이언트로 로그인 시도
     const verifier = createClient(publicEnv.supabaseUrl, publicEnv.supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
+    // Supabase CAPTCHA 보호가 켜져 있으면 이 로그인에도 Turnstile 토큰이 필요하다 (폼의 hidden 필드)
+    const captchaToken = String(formData.get('captcha_token') ?? '').trim();
     const { error: authError } = await verifier.auth.signInWithPassword({
       email: user.email,
       password: String(formData.get('password') ?? ''),
+      ...(captchaToken ? { options: { captchaToken } } : {}),
     });
-    if (authError) return { error: '비밀번호가 맞지 않아요.' };
-    await verifier.auth.signOut().catch(() => {});
+    if (authError) {
+      // src/lib/captcha.ts 의 isCaptchaError / CAPTCHA_FAILED_MESSAGE 와 같은 규칙
+      if (authError.message.toLowerCase().includes('captcha')) return { error: '사람 확인이 실패했어요. 다시 시도해 주세요.' };
+      return { error: '비밀번호가 맞지 않아요.' };
+    }
+    await verifier.auth.signOut({ scope: 'local' }).catch(() => {});
 
     const { familyDeleted, kidAccounts } = await repo.deleteParentAccount(user.id);
     console.info('[audit] account deleted', { user: user.id, family: member?.family_id, familyDeleted, kidAccounts });
@@ -418,10 +428,10 @@ const answersSchema = z.record(z.string(), z.string().max(200));
 export async function submitTestAction(testId: string, answers: Record<string, string>): Promise<ActionState> {
   const id = uuid.parse(testId);
   const result = await run(async () => {
-    const { member } = await requireMember();
+    const { member, learner } = await requireLearner();
     const parsed = answersSchema.parse(answers);
     const test = await repo.getTest(member.family_id, id);
-    if (!test) return { error: '시험을 찾을 수 없어요.' };
+    if (!test || test.learner_id !== learner.id) return { error: '시험을 찾을 수 없어요.' };
     if (test.status !== 'in_progress') return; // 중복 제출 → 결과 화면으로
     const items = await repo.getTestItems(member.family_id, id);
     const results = items.map((item) => {

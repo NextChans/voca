@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Bullets, LegalDoc, Section } from '@/app/_components/LegalDoc';
 import {
   formatLegalDate,
-  LEGAL_VERSION,
+  LEGAL_EFFECTIVE_DATE,
   OPERATOR,
   SERVICE_NAME,
   SUPABASE_REGION,
@@ -15,8 +15,8 @@ const TRANSFERS = [
   {
     to: 'Vercel Inc.',
     country: '미국 (앱 서버는 호주 시드니 리전에서 실행)',
-    items: '서비스 이용 중 주고받는 모든 정보 (계정·학습 정보, 단어 사진 등)',
-    purpose: '웹 서비스 호스팅 및 요청 처리',
+    items: '서비스 이용 중 주고받는 모든 정보 (계정·학습 정보, 단어 사진 등), 익명 방문 통계',
+    purpose: '웹 서비스 호스팅 및 요청 처리, 방문 통계(Web Analytics)',
   },
   {
     to: 'Supabase Inc.',
@@ -30,6 +30,12 @@ const TRANSFERS = [
     items: '단어 인식을 위해 올린 사진',
     purpose:
       '사진 속 단어 인식 (voca는 사진을 저장하지 않으며, 유료 등급으로 이용해 모델 학습에 쓰이지 않음)',
+  },
+  {
+    to: 'Cloudflare, Inc. (Turnstile)',
+    country: '미국',
+    items: '가입·로그인 시 브라우저·접속 정보 (자동화 여부 판별용)',
+    purpose: '자동화된 가입·로그인 공격 방지',
   },
   {
     to: 'Google LLC (Cloud Text-to-Speech)',
@@ -70,9 +76,11 @@ export default function PrivacyPage() {
             시각
           </li>
           <li>
-            <strong>자동 수집 정보</strong>: 로그인 유지를 위한 세션 쿠키. 광고·분석용 추적 도구는
-            사용하지 않습니다. 접속 기록(IP 주소, 요청 시각 등 서버 로그)은 호스팅 사업자가
-            보관합니다.
+            <strong>자동 수집 정보</strong>: 로그인 유지를 위한 세션 쿠키. 접속 기록(IP 주소, 요청 시각
+            등 서버 로그)은 호스팅 사업자가 보관합니다. 서비스 개선을 위해 Vercel Web Analytics로 쿠키 없이
+            익명화된 방문 통계(방문 페이지, 기기·브라우저 종류, 국가)를 수집하며, 개인을 식별하지 않습니다.
+            광고용 추적 도구는 사용하지 않습니다. 가입·로그인 시 자동화된 공격을 막기 위해 Cloudflare
+            Turnstile이 브라우저 정보를 일시 확인할 수 있습니다.
           </li>
           <li>
             <strong>단어 인식용 사진</strong>: 교재 사진 등에서 단어를 뽑아낼 때 사진을 AI 서비스로
@@ -212,7 +220,7 @@ export default function PrivacyPage() {
 
       <Section title="9. 쿠키의 설치·운영 및 거부">
         <p>
-          서비스는 로그인과 기능 유지에 꼭 필요한 쿠키만 사용하며, 광고·분석 쿠키는 쓰지 않습니다.
+          서비스는 로그인과 기능 유지에 꼭 필요한 쿠키만 사용하며, 광고·분석 쿠키는 쓰지 않습니다(방문 통계는 쿠키 없이 수집).
         </p>
         <Bullets>
           <li>Supabase 인증 세션 쿠키: 로그인 상태 유지</li>
@@ -275,7 +283,7 @@ export default function PrivacyPage() {
 
       <Section title="12. 처리방침의 변경">
         <p>
-          이 개인정보 처리방침은 {formatLegalDate(LEGAL_VERSION)}부터 시행합니다. 내용이 바뀌면 시행
+          이 개인정보 처리방침은 {formatLegalDate(LEGAL_EFFECTIVE_DATE)}부터 시행합니다. 내용이 바뀌면 시행
           전에 앱 안에서 알립니다. 서비스 이용 조건은{' '}
           <Link href="/terms" className="text-brand-600 hover:underline">
             이용약관

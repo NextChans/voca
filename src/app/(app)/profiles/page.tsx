@@ -5,6 +5,7 @@ import { ParentLockNotice } from '@/components/ParentLockNotice';
 import { getSelectedLearner, requireMember } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
+import { MAX_LEARNERS_PER_FAMILY } from '@/lib/limits';
 import { AddLearnerForm } from './AddLearnerForm';
 
 export const metadata: Metadata = { title: '누가 공부하나요?' };
@@ -96,7 +97,14 @@ export default async function ProfilesPage() {
           <h2 id="add-learner-title" className="text-lg font-bold">
             ➕ 자녀 추가
           </h2>
-          <AddLearnerForm />
+          {learners.length >= MAX_LEARNERS_PER_FAMILY ? (
+            <p className="mt-2 text-sm text-slate-500">
+              자녀 프로필은 가족당 {MAX_LEARNERS_PER_FAMILY}명까지 만들 수 있어요. 필요하면 설정에서 프로필을 삭제한 뒤
+              추가해 주세요.
+            </p>
+          ) : (
+            <AddLearnerForm />
+          )}
         </section>
       ) : (
         learners.length > 0 && <ParentLockNotice next="/profiles" what="자녀 추가" />

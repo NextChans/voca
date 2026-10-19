@@ -73,7 +73,7 @@
 | `GEMINI_API_KEY` | 권장 | 교재 사진 단어 인식(Gemini, **무료 등급 사용 가능**, [Google AI Studio](https://aistudio.google.com/apikey)에서 발급). 설정 시 최우선 사용 |
 | `GEMINI_MODEL` | 선택 | 기본 `gemini-3.5-flash-lite` (못 찾으면 다른 Flash 모델로 자동 재시도) |
 | `ANTHROPIC_API_KEY` | 선택 | Gemini 키가 없을 때 Claude Vision 사용. 둘 다 없으면 브라우저 OCR(사전형 교재는 인식 불가) |
-| `GOOGLE_TTS_API_KEY` | 선택 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 비공식 Google Translate TTS 사용 |
+| `GOOGLE_TTS_API_KEY` | 선택 | 시험 발음 품질·안정성 향상(Google Cloud TTS). 없으면 서버 합성 없이 기기 음성만 사용(시험 철자 문항 발음 불가) |
 
 3. Deploy합니다.
 

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bullets, LegalDoc, Numbered, Section } from '@/app/_components/LegalDoc';
-import { formatLegalDate, LEGAL_VERSION, OPERATOR, SERVICE_NAME } from '@/lib/legal';
+import { formatLegalDate, LEGAL_EFFECTIVE_DATE, OPERATOR, SERVICE_NAME } from '@/lib/legal';
 
 export const metadata: Metadata = { title: '이용약관' };
 
@@ -119,7 +119,7 @@ export default function TermsPage() {
       </Section>
 
       <Section title="부칙">
-        <p>이 약관은 {formatLegalDate(LEGAL_VERSION)}부터 시행합니다.</p>
+        <p>이 약관은 {formatLegalDate(LEGAL_EFFECTIVE_DATE)}부터 시행합니다.</p>
       </Section>
     </LegalDoc>
   );
