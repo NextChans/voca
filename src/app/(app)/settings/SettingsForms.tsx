@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import {
+  deleteLearnerAction,
   cancelTestAction,
   createInviteAction,
   createLearnerLoginAction,
@@ -313,5 +314,29 @@ export function LearnerLoginForm({ learner }: { learner: Learner }) {
       </button>
       <FormMessage state={removeState} />
     </div>
+  );
+}
+
+/** 자녀 프로필 삭제: 이름을 다시 입력해야 실행 */
+export function DeleteLearnerForm({ learner }: { learner: Learner }) {
+  const [state, action] = useActionState(deleteLearnerAction, initial);
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-rose-600">{learner.name} 프로필 삭제</summary>
+      <form action={action} className="mt-3 space-y-2">
+        <p className="rounded-xl bg-rose-50 px-3 py-2 text-rose-800">
+          {learner.name}의 단어·시험 기록·아이 로그인 계정이 모두 삭제돼요. 되돌릴 수 없어요.
+        </p>
+        <input type="hidden" name="learner_id" value={learner.id} />
+        <label className="label" htmlFor={`confirm-${learner.id}`}>
+          확인을 위해 이름 &apos;{learner.name}&apos;을(를) 입력해 주세요
+        </label>
+        <input id={`confirm-${learner.id}`} name="confirm_name" required autoComplete="off" className="input" />
+        <SubmitButton className="btn-danger" pendingText="삭제하는 중…">
+          삭제
+        </SubmitButton>
+        <FormMessage state={state} />
+      </form>
+    </details>
   );
 }

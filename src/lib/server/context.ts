@@ -3,6 +3,7 @@ import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { requireUser, type SessionUser } from '@/lib/server/auth';
+import { LEGAL_VERSION } from '@/lib/legal';
 import * as repo from '@/lib/server/repo';
 
 const LEARNER_COOKIE = 'voca_learner';
@@ -23,6 +24,8 @@ export const requireMember = cache(async (): Promise<MemberContext> => {
   const user = await requireUser();
   const member = await getMembershipOnce(user.id);
   if (!member) redirect('/onboarding');
+  // 부모는 현재 버전의 약관·처리방침 동의가 있어야 이용 가능 (자녀 계정은 부모가 대신 동의)
+  if (member.role === 'parent' && member.consent_version !== LEGAL_VERSION) redirect('/consent');
   return { user, member };
 });
 
@@ -56,4 +59,8 @@ export async function setSelectedLearner(learnerId: string): Promise<void> {
     path: '/',
     maxAge: 60 * 60 * 24 * 365,
   });
+}
+
+export async function clearSelectedLearner(): Promise<void> {
+  (await cookies()).delete(LEARNER_COOKIE);
 }

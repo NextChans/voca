@@ -20,7 +20,11 @@ export default async function NewWordsPage() {
         </h1>
       </div>
 
-      <WordEntry aiOcr={activeOcrProvider() !== null} learnerName={learner.name} />
+      <WordEntry
+        aiOcr={activeOcrProvider() !== null}
+        learnerName={learner.name}
+        minTestWords={learner.min_test_words}
+      />
     </div>
   );
 }
