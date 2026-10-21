@@ -1,3 +1,5 @@
+import { TERM_ERROR, TERM_MAX, TERM_PATTERN } from '@/lib/domain/term';
+
 export interface EditRow {
   key: string;
   term: string;
@@ -5,7 +7,6 @@ export interface EditRow {
 }
 
 export const MAX_ROWS = 300;
-const TERM = /^[a-z][a-z\s'’\-./]*$/i;
 
 let seq = 0;
 export function newRow(term = '', meaning = ''): EditRow {
@@ -24,8 +25,8 @@ export function rowIssue(r: EditRow): RowIssue {
   const term = r.term.trim();
   const meaning = r.meaning.trim();
   if (!term) return { field: 'term', message: '영어 단어를 입력해 주세요.' };
-  if (term.length > 100) return { field: 'term', message: '단어가 너무 길어요.' };
-  if (!TERM.test(term)) return { field: 'term', message: '알파벳으로 시작하고 알파벳만 써 주세요.' };
+  if (term.length > TERM_MAX) return { field: 'term', message: '단어가 너무 길어요.' };
+  if (!TERM_PATTERN.test(term)) return { field: 'term', message: TERM_ERROR };
   if (!meaning) return { field: 'meaning', message: '뜻을 입력해 주세요.' };
   if (meaning.length > 200) return { field: 'meaning', message: '뜻은 200자까지예요.' };
   return null;

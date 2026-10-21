@@ -47,6 +47,21 @@ describe('spellingVariants', () => {
   });
 });
 
+describe('gradeSpelling — 특수 문자', () => {
+  it('특수 문자는 그대로 맞춰야 정답', () => {
+    expect(gradeSpelling("o'clock", 'o’clock')).toBe(true);
+    expect(gradeSpelling('T-shirt', 't-shirt')).toBe(true);
+    expect(gradeSpelling('T-shirt', 'tshirt')).toBe(false);
+    expect(gradeSpelling('rock & roll', 'rock & roll')).toBe(true);
+    expect(gradeSpelling('Mr.', 'mr')).toBe(true);
+  });
+  it('물결(~)은 무시', () => {
+    expect(gradeSpelling('be good at ~', 'be good at')).toBe(true);
+    expect(gradeSpelling('be good at ~', 'be good at ~')).toBe(true);
+    expect(gradeSpelling('~ing', 'ing')).toBe(true);
+  });
+});
+
 describe('gradeSpelling', () => {
   it('accepts exact match', () => {
     expect(gradeSpelling('apple', 'apple')).toBe(true);

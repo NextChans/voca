@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isValidTerm } from '@/lib/domain/term';
 import { z } from 'zod';
 import { getUser } from '@/lib/server/auth';
 import { activeOcrProvider, extractWords, OcrError } from '@/lib/server/ocr';
@@ -17,7 +18,6 @@ export const maxDuration = 60;
 
 const MAX_BASE64 = 6 * 1024 * 1024; // ≈ 4.5MB 이미지
 const MAX_WORDS = 300;
-const TERM = /^[a-z][a-z\s'’\-./]*$/i;
 
 const BodySchema = z.object({
   image: z
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         .replace(/\s+/g, ' ')
         .replace(/^[,\s]+|[,\s]+$/g, '')
         .trim();
-      if (!term || !meaning || term.length > 100 || meaning.length > 200 || !TERM.test(term)) continue;
+      if (!term || !meaning || meaning.length > 200 || !isValidTerm(term)) continue;
       const key = term.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);

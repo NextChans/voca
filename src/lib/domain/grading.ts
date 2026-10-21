@@ -3,6 +3,7 @@
  *
  * 스펠링(direction = 'spelling')
  *  - 대소문자·앞뒤 공백·연속 공백·둥근 따옴표(’) 차이는 무시
+ *  - 물결(~, "be good at ~" 의 목적어 자리 표시)은 비교에서 제외
  *  - 등록된 단어에 "/" 로 변형 표기가 있으면 (예: "color / colour") 어느 쪽이든 정답
  *
  * 뜻(direction = 'meaning')
@@ -20,6 +21,7 @@ export function normalizeSpelling(input: string): string {
     .normalize('NFKC')
     .replace(/[‘’ʼ`]/g, "'")
     .replace(/[‐-―]/g, '-')
+    .replace(/[~∼〜]/g, ' ')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim()

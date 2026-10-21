@@ -1,12 +1,11 @@
 'use client';
 
 import { englishInputProps, koreanInputProps } from '@/lib/client/keyboard';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { deleteWordsAction, updateWordAction } from '@/app/actions';
 import { SpeakButton } from '@/components/SpeakButton';
+import { isValidTerm, TERM_ERROR } from '@/lib/domain/term';
 import type { Mask, WordItem } from './WordList';
-
-const TERM = /^[a-z][a-z\s'’\-./]*$/i;
 
 export function WordRow({
   word,
@@ -40,7 +39,7 @@ export function WordRow({
   const save = () => {
     const t = term.trim();
     const m = meaning.trim();
-    if (!TERM.test(t)) return setError('영어 단어는 알파벳으로만 입력해 주세요.');
+    if (!isValidTerm(t)) return setError(TERM_ERROR);
     if (!m) return setError('뜻을 입력해 주세요.');
     startTransition(async () => {
       const res = await updateWordAction(word.id, t, m);
@@ -115,9 +114,11 @@ export function WordRow({
           {hideTerm ? (
             <Cover onClick={() => setRevealed(true)} label="단어 보기" />
           ) : (
-            <span className="truncate text-lg font-semibold text-slate-900" lang="en">
-              {word.term}
-            </span>
+            <Revealed active={mask === 'term'} onHide={() => setRevealed(false)}>
+              <span className="truncate text-lg font-semibold text-slate-900" lang="en">
+                {word.term}
+              </span>
+            </Revealed>
           )}
           <SpeakButton text={word.term} />
         </div>
@@ -125,7 +126,9 @@ export function WordRow({
           {hideMeaning ? (
             <Cover onClick={() => setRevealed(true)} label="뜻 보기" />
           ) : (
-            <span className="text-slate-600">{word.meaning}</span>
+            <Revealed active={mask === 'meaning'} onHide={() => setRevealed(false)}>
+              <span className="text-slate-600">{word.meaning}</span>
+            </Revealed>
           )}
         </div>
         {error && (
@@ -177,6 +180,21 @@ function Cover({ onClick, label }: { onClick: () => void; label: string }) {
       className="h-8 w-full max-w-40 rounded-lg bg-slate-200 text-xs font-medium text-slate-400 hover:bg-slate-300"
     >
       눌러서 보기
+    </button>
+  );
+}
+
+/** 가리기 모드에서 펼친 칸: 한 번 더 누르면 다시 가린다 */
+function Revealed({ active, onHide, children }: { active: boolean; onHide: () => void; children: ReactNode }) {
+  if (!active) return children;
+  return (
+    <button
+      type="button"
+      onClick={onHide}
+      aria-label="다시 가리기"
+      className="flex min-w-0 max-w-full rounded-lg text-left hover:bg-slate-100"
+    >
+      {children}
     </button>
   );
 }
