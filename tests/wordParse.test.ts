@@ -71,6 +71,26 @@ describe('parseWordLine — rejected lines', () => {
   });
 });
 
+describe('parseWordLine — 특수 문자 단어', () => {
+  it.each([
+    ["o'clock 정각", "o'clock", '정각'],
+    ['T-shirt 티셔츠', 'T-shirt', '티셔츠'],
+    ['Mr. ~씨', 'Mr.', '~씨'],
+    ['rock & roll 로큰롤', 'rock & roll', '로큰롤'],
+    ['(be) good at ~을 잘하다', '(be) good at', '~을 잘하다'],
+    ['café 카페', 'café', '카페'],
+  ])('%s', (line, term, meaning) => {
+    expect(parseWordLine(line)).toEqual({ term, meaning });
+  });
+  it('목록에서도 특수 문자 단어를 버리지 않는다', () => {
+    expect(parseWordList("o'clock 정각\nT-shirt 티셔츠\nrock & roll 로큰롤").map((w) => w.term)).toEqual([
+      "o'clock",
+      'T-shirt',
+      'rock & roll',
+    ]);
+  });
+});
+
 describe('parseWordList', () => {
   it('parses a mixed block and skips blank / garbage lines', () => {
     const text = [

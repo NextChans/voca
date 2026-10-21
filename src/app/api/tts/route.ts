@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { TERM_PATTERN } from '@/lib/domain/term';
 import { getUser } from '@/lib/server/auth';
 import { serverEnv } from '@/lib/server/env';
 import { TTS_DAILY_PER_FAMILY } from '@/lib/limits';
@@ -13,7 +14,6 @@ import * as repo from '@/lib/server/repo';
  * 로그인한 가족 구성원만, 가족당 하루 TTS_DAILY_PER_FAMILY 회 (실패한 호출은 환불).
  */
 const MAX_TEXT = 100;
-const ENGLISH = /^[a-z][a-z\s'’\-./]*$/i;
 
 function error(status: number, message: string) {
   return NextResponse.json({ error: message }, { status, headers: { 'cache-control': 'no-store' } });
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     if (!text) return error(404, 'not found');
   } else {
     text = (params.get('text') ?? '').trim();
-    if (!text || text.length > MAX_TEXT || !ENGLISH.test(text)) return error(400, 'invalid text');
+    if (!text || text.length > MAX_TEXT || !TERM_PATTERN.test(text)) return error(400, 'invalid text');
   }
 
   const key = serverEnv.googleTtsApiKey();

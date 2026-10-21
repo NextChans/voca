@@ -7,6 +7,8 @@
  *   1. apple 사과, 능금    (앞 번호 제거)
  *   사과 apple            (한글 뒤 영문도 허용)
  */
+import { isValidTerm } from './term';
+
 export interface ParsedWord {
   term: string;
   meaning: string;
@@ -49,7 +51,7 @@ export function parseWordLine(rawLine: string): ParsedWord | null {
   if (idx > 0) {
     const term = clean(line.slice(0, idx));
     const meaning = clean(line.slice(idx));
-    if (/[a-z]/i.test(term) && meaning) return { term, meaning };
+    if (/\p{Script=Latin}/u.test(term) && meaning) return { term, meaning };
   }
   // 한글 → 영문
   if (idx === 0) {
@@ -68,7 +70,7 @@ export function parseWordList(text: string): ParsedWord[] {
   const seen = new Set<string>();
   for (const line of text.split(/\r?\n/)) {
     const w = parseWordLine(line);
-    if (!w || !/^[a-z][a-z\s'’\-./]*$/i.test(w.term)) continue;
+    if (!w || !isValidTerm(w.term)) continue;
     const key = w.term.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
