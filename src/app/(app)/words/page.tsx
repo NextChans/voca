@@ -4,6 +4,7 @@ import { isTestableWord, kstDate } from '@/lib/domain/week';
 import { requireLearner } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
+import { BookFilter, type BookFilterValue } from './_components/BookFilter';
 import { WordList, type WordGroup } from './_components/WordList';
 
 export const metadata = { title: '단어장' };
@@ -16,14 +17,27 @@ function dateLabel(isoDate: string): string {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`;
 }
 
-export default async function WordsPage() {
+export default async function WordsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user, member, learner } = await requireLearner();
-  const [words, stats, tested, parentMode] = await Promise.all([
+  const [allWords, books, stats, tested, parentMode, params] = await Promise.all([
     repo.listWords(member.family_id, learner.id),
+    repo.listBooks(member.family_id, learner.id),
     repo.listWordStats(member.family_id),
     repo.listRegularTestedWordIds(member.family_id, learner.id),
     isParentMode(user.id, member.family_id),
+    searchParams,
   ]);
+
+  // 단어책 거르기: ?book=<id> | none(책 없음) | 없으면 전체. 모르는 값은 전체로.
+  const bookNames = new Map(books.map((b) => [b.id, b.name]));
+  const filter: BookFilterValue =
+    params.book === 'none' ? 'none' : typeof params.book === 'string' && bookNames.has(params.book) ? params.book : 'all';
+  const words =
+    filter === 'all' ? allWords : allWords.filter((w) => (filter === 'none' ? !w.book_id : w.book_id === filter));
 
   const now = new Date();
   let waiting = 0;
@@ -52,6 +66,8 @@ export default async function WordsPage() {
       tested: isTested,
       wrong: s?.wrong_count ?? 0,
       attempts: s?.attempts ?? 0,
+      // 전체 보기에서만 어느 책 단어인지 꼬리표로
+      book: filter === 'all' && w.book_id ? (bookNames.get(w.book_id) ?? null) : null,
     });
   }
   const groups = [...byDate.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -62,19 +78,36 @@ export default async function WordsPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">📚 {learner.name}의 단어장</h1>
-          <p className="mt-0.5 text-sm text-slate-500">모두 {words.length}개</p>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {filter === 'all'
+              ? `모두 ${words.length}개`
+              : `${filter === 'none' ? '책 없음' : `📗 ${bookNames.get(filter)}`} · ${words.length}개`}
+          </p>
         </div>
-        <Link href="/words/new" className="btn-primary shrink-0">
+        <Link
+          href={filter !== 'all' && filter !== 'none' ? `/words/new?book=${filter}` : '/words/new'}
+          className="btn-primary shrink-0"
+        >
           ➕ 단어 등록
         </Link>
       </div>
+
+      {books.length > 0 ? (
+        <BookFilter books={books} value={filter} />
+      ) : (
+        <p className="text-right text-sm">
+          <Link href="/words/books" className="text-slate-500 hover:underline">
+            📗 단어책별로 나눠 담기
+          </Link>
+        </p>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <SummaryChip label="시험 대기" value={waiting} tone="bg-brand-50 text-brand-700" />
         <SummaryChip label="내일부터" value={tomorrow} tone="bg-amber-50 text-amber-700" />
         <SummaryChip label="출제 완료" value={done} tone="bg-emerald-50 text-emerald-700" />
       </div>
-      {waiting > 0 && waiting < minWords && (
+      {filter === 'all' && waiting > 0 && waiting < minWords && (
         <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-600">
           시험은 대기 단어가 {minWords}개 이상일 때 볼 수 있어요. ({minWords - waiting}개 더 필요해요)
         </p>
@@ -85,13 +118,16 @@ export default async function WordsPage() {
       {groups.length === 0 ? (
         <div className="card text-center text-slate-500">
           <p className="text-4xl">📝</p>
-          <p className="mt-2">아직 등록된 단어가 없어요.</p>
-          <Link href="/words/new" className="btn-primary mt-4">
-            첫 단어 등록하기
+          <p className="mt-2">{filter === 'all' ? '아직 등록된 단어가 없어요.' : '이 단어책에는 아직 단어가 없어요.'}</p>
+          <Link
+            href={filter !== 'all' && filter !== 'none' ? `/words/new?book=${filter}` : '/words/new'}
+            className="btn-primary mt-4"
+          >
+            {filter === 'all' ? '첫 단어 등록하기' : '단어 넣기'}
           </Link>
         </div>
       ) : (
-        <WordList groups={groups} parentMode={parentMode} />
+        <WordList key={filter} groups={groups} parentMode={parentMode} books={books} />
       )}
     </div>
   );

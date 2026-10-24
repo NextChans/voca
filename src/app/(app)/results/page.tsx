@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireLearner } from '@/lib/server/context';
 import * as repo from '@/lib/server/repo';
-import { MODE_LABEL } from '@/lib/domain/types';
+import { KIND_BADGE, MODE_LABEL } from '@/lib/domain/types';
 import { formatKst, weekRangeLabel } from '@/lib/domain/week';
 import { percent, scoreBarClass, scoreTextClass } from './_components/score';
 
@@ -108,12 +108,8 @@ export default async function ResultsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`badge ${
-                              t.kind === 'regular' ? 'bg-brand-100 text-brand-700' : 'bg-violet-100 text-violet-700'
-                            }`}
-                          >
-                            {t.kind === 'regular' ? '정기' : '재시험'}
-                          </span>
+                            className={`badge ${KIND_BADGE[t.kind].tone}`}>{KIND_BADGE[t.kind].text}</span>
+                          {t.book_name && <span className="badge bg-teal-50 text-teal-700">📗 {t.book_name}</span>}
                           <span className="badge bg-slate-100 text-slate-600">{MODE_LABEL[t.mode]}</span>
                           {t.status === 'cancelled' && <span className="badge bg-slate-200 text-slate-600">취소됨</span>}
                           {t.status === 'in_progress' && (

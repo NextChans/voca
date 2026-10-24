@@ -41,8 +41,9 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | `family_members` | family_id, user_id(unique), display_name | 부모 |
 | `family_invites` | code_hash(unique), expires_at, used_by/used_at | 1회용 |
 | `learners` | family_id, name, avatar, weekly_limit(2), min_test_words(50), user_id, login_id | 자녀 |
-| `words` | family_id, learner_id, term, meaning, created_by, created_at | (learner_id, lower(term)) unique |
-| `tests` | learner_id, kind(regular/retest), mode(spelling/meaning/mixed), parent_test_id, status(in_progress/submitted/cancelled), week_start, total, correct | 자녀별 진행 중 1건(partial unique index) |
+| `word_books` | family_id, learner_id, name | 자녀별 단어책(선택). (learner_id, lower(name)) unique, 자녀당 30권 |
+| `words` | family_id, learner_id, book_id, term, meaning, created_by, created_at | (learner_id, lower(term)) unique. `(learner_id, book_id)` → `word_books(learner_id, id)` 복합 FK(다른 자녀의 책 불가), 책 삭제 시 `book_id`만 null |
+| `tests` | learner_id, kind(regular/retest/book), mode(spelling/meaning/mixed), parent_test_id, book_id, **book_name 스냅샷**, status(in_progress/submitted/cancelled), week_start, total, correct | 자녀별 진행 중 1건(partial unique index) |
 | `test_items` | test_id, word_id, seq, direction, **term/meaning 스냅샷**, answer, is_correct, auto_correct, overridden_by/at | 감사 추적 |
 | `user_consents` | user_id, version, kinds[], agreed_at | 동의 이력(감사). `family_members.consent_version`에 최신 버전 |
 | `usage_counters` | family_id, kind(ocr/tts), day(KST), count | 일일 사용량 |
@@ -56,7 +57,9 @@ RLS 정책을 테이블별로 세밀하게 짜는 대신 브라우저 롤의 접
 | 출제 대상 < `min_test_words`(기본 50) → `NOT_ENOUGH_WORDS` | SQL `create_test` |
 | 주간 정기 시험 ≤ `weekly_limit`(기본 2), 주 = KST 월요일 시작, 취소분 제외 | SQL `create_test`, `kst_week_start()` |
 | 자녀별 진행 중 시험 1건, 동시 시작 직렬화 | partial unique index + `pg_advisory_xact_lock` |
-| 재시험 = 제출된 시험의 오답 문항만(방향 유지), 횟수 미포함, 연쇄 가능 | SQL `create_test(kind='retest')` |
+| 재시험 = 제출된 시험의 오답 문항만(방향 유지), 횟수 미포함, 연쇄 가능. 단어책 시험의 재시험은 책 정보를 이어받음 | SQL `create_test(kind='retest')` |
+| 단어책 시험 = 고른 책의 단어 전부(등록일·정기 출제 여부 무관, 300개 넘으면 무작위 300), 주간 횟수·정기 출제 이력에 영향 없음. 빈 책 `NO_BOOK_WORDS`, 다른 자녀 책 `BOOK_NOT_FOUND` | SQL `create_test(kind='book', p_book_id)` |
+| 단어책 = 선택 기능. 책이 없는 자녀는 화면이 그대로(단어장에 안내 링크만). 만들기·책으로 등록은 누구나, 이름 바꾸기·삭제·단어 옮기기는 부모 모드. 책을 지워도 단어·시험 기록은 남고 '책 없음'이 됨 | `createBookAction` / `renameBookAction` / `deleteBookAction` / `moveWordsAction`, `/words/books`, 단어장·연습의 `?book=<id>\|none` 거르기 |
 | 제출은 전 문항이 정확히 1번씩 채점돼야 확정, 중복 제출 거부 | SQL `submit_test` (행 잠금) |
 | 채점: 철자 = 대소문자·공백·둥근따옴표 무시, `a / b` 변형 허용. 뜻 = `, ; / ·` 로 나눈 후보 중 일치, 괄호·공백·문장부호 무시, 여러 개 쓰면 전부 맞아야 정답 | `src/lib/domain/grading.ts` |
 | 부모 정답 인정/취소 → 점수 재계산 + 정정자 기록 | SQL `override_item` |

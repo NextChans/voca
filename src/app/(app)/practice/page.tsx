@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { buildNewWords, buildPracticeWords } from '@/lib/domain/practice';
 import { requireLearner } from '@/lib/server/context';
+import { BookFilter } from '../words/_components/BookFilter';
 import * as repo from '@/lib/server/repo';
 import { PracticeRunner, type PracticeCardWord, type PracticeScope } from './_components/PracticeRunner';
 
@@ -8,10 +9,25 @@ export const metadata = { title: '연습' };
 
 type Tab = 'wrong' | 'new';
 
-const TABS: { value: Tab; label: string; href: string }[] = [
-  { value: 'wrong', label: '🔁 오답 연습', href: '/practice' },
-  { value: 'new', label: '🆕 새 단어 연습', href: '/practice?tab=new' },
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'wrong', label: '🔁 오답 연습' },
+  { value: 'new', label: '🆕 새 단어 연습' },
 ];
+
+function practiceHref(tab: Tab, book: string): string {
+  const q = new URLSearchParams();
+  if (tab === 'new') q.set('tab', 'new');
+  if (book !== 'all') q.set('book', book);
+  const s = q.toString();
+  return s ? `/practice?${s}` : '/practice';
+}
+
+/** 단어책 거르기: 'all' | 'none' | 단어책 id */
+function inBook(book: string, wordBookId: string | null | undefined): boolean {
+  if (book === 'all') return true;
+  if (wordBookId === undefined) return false; // 지워진 단어 (전체에서만)
+  return book === 'none' ? wordBookId === null : wordBookId === book;
+}
 
 /** '2026-10-16' → '10/16' */
 function shortDate(date: string): string {
@@ -25,7 +41,10 @@ export default async function PracticePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { member, learner } = await requireLearner();
-  const tab: Tab = (await searchParams).tab === 'new' ? 'new' : 'wrong';
+  const [params, books] = await Promise.all([searchParams, repo.listBooks(member.family_id, learner.id)]);
+  const tab: Tab = params.tab === 'new' ? 'new' : 'wrong';
+  const book =
+    params.book === 'none' ? 'none' : typeof params.book === 'string' && books.some((b) => b.id === params.book) ? params.book : 'all';
 
   return (
     <div className="space-y-5">
@@ -43,7 +62,7 @@ export default async function PracticePage({
         {TABS.map((t) => (
           <Link
             key={t.value}
-            href={t.href}
+            href={practiceHref(t.value, book)}
             replace
             aria-current={tab === t.value ? 'page' : undefined}
             className={`flex-1 rounded-xl px-2 py-2 text-center text-sm font-semibold transition ${
@@ -55,23 +74,40 @@ export default async function PracticePage({
         ))}
       </nav>
 
+      {books.length > 0 && (
+        <BookFilter
+          books={books}
+          value={book}
+          basePath="/practice"
+          extra={tab === 'new' ? { tab: 'new' } : {}}
+          manage={false}
+        />
+      )}
+
       {tab === 'new' ? (
-        <NewWordsPractice familyId={member.family_id} learnerId={learner.id} />
+        <NewWordsPractice familyId={member.family_id} learnerId={learner.id} book={book} />
       ) : (
-        <WrongWordsPractice familyId={member.family_id} learnerId={learner.id} />
+        <WrongWordsPractice familyId={member.family_id} learnerId={learner.id} book={book} />
       )}
     </div>
   );
 }
 
-async function WrongWordsPractice({ familyId, learnerId }: { familyId: string; learnerId: string }) {
-  const words = buildPracticeWords(await repo.listSubmittedItemResults(familyId, learnerId));
+async function WrongWordsPractice({ familyId, learnerId, book }: { familyId: string; learnerId: string; book: string }) {
+  const [results, all] = await Promise.all([
+    repo.listSubmittedItemResults(familyId, learnerId),
+    book === 'all' ? Promise.resolve([]) : repo.listWords(familyId, learnerId),
+  ]);
+  const bookOf = new Map(all.map((w) => [w.id, w.book_id]));
+  const words = buildPracticeWords(
+    book === 'all' ? results : results.filter((r) => inBook(book, r.word_id ? bookOf.get(r.word_id) : undefined))
+  );
 
   if (words.length === 0) {
     return (
       <div className="card text-center">
         <p className="text-5xl">🌟</p>
-        <p className="mt-3 text-lg font-bold">아직 틀린 단어가 없어요!</p>
+        <p className="mt-3 text-lg font-bold">{book === 'all' ? '아직 틀린 단어가 없어요!' : '이 단어책에서 틀린 단어가 없어요!'}</p>
         <p className="mt-1 text-sm text-slate-500">시험을 보고 나면 틀린 단어가 여기에 모여요.</p>
         <Link href="/test/new" className="btn-primary mt-4">
           시험 보러 가기
@@ -98,16 +134,20 @@ async function WrongWordsPractice({ familyId, learnerId }: { familyId: string; l
     { key: 'all', title: '한 번이라도 틀린 단어', desc: `모두 ${cards.length}개`, words: cards },
   ];
 
-  return <PracticeRunner key="wrong" scopes={scopes} listWords={cards} listTitle="틀린 단어 목록 보기" />;
+  return <PracticeRunner key={`wrong-${book}`} scopes={scopes} listWords={cards} listTitle="틀린 단어 목록 보기" />;
 }
 
-async function NewWordsPractice({ familyId, learnerId }: { familyId: string; learnerId: string }) {
+async function NewWordsPractice({ familyId, learnerId, book }: { familyId: string; learnerId: string; book: string }) {
   const now = new Date();
   const [all, tested] = await Promise.all([
     repo.listWords(familyId, learnerId),
     repo.listRegularTestedWordIds(familyId, learnerId),
   ]);
-  const words = buildNewWords(all, tested, now);
+  const words = buildNewWords(
+    all.filter((w) => inBook(book, w.book_id)),
+    tested,
+    now
+  );
 
   if (words.length === 0) {
     return (
@@ -139,5 +179,5 @@ async function NewWordsPractice({ familyId, learnerId }: { familyId: string; lea
     { key: 'all', title: '아직 시험 안 본 단어 전부', desc: `모두 ${cards.length}개`, words: cards },
   ];
 
-  return <PracticeRunner key="new" scopes={scopes} listWords={cards} listTitle="새 단어 목록 보기" />;
+  return <PracticeRunner key={`new-${book}`} scopes={scopes} listWords={cards} listTitle="새 단어 목록 보기" />;
 }

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { KIND_BADGE } from '@/lib/domain/types';
 import { requireLearner } from '@/lib/server/context';
 import * as repo from '@/lib/server/repo';
 import { formatKst, isTestableWord, kstWeekStart, weekRangeLabel } from '@/lib/domain/week';
@@ -150,11 +151,8 @@ export default async function HomePage() {
                     className="flex items-center gap-3 rounded-xl px-2 py-3 hover:bg-slate-50"
                   >
                     <span
-                      className={`badge ${
-                        t.kind === 'regular' ? 'bg-brand-100 text-brand-700' : 'bg-violet-100 text-violet-700'
-                      }`}
-                    >
-                      {t.kind === 'regular' ? '정기' : '재시험'}
+                      className={`badge ${KIND_BADGE[t.kind].tone}`}>
+                      {KIND_BADGE[t.kind].text}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm text-slate-500">
