@@ -62,13 +62,21 @@ async function addWords(family: string, learner: string, n: number, daysAgo: num
   );
 }
 
-const createTest = (family: string, learner: string, kind = 'regular', mode = 'spelling', parent: string | null = null) =>
-  one<{ id: string }>(`select public.create_test($1, $2, $3, $4, $5) as id`, [
+const createTest = (
+  family: string,
+  learner: string,
+  kind = 'regular',
+  mode = 'spelling',
+  parent: string | null = null,
+  book: string | null = null
+) =>
+  one<{ id: string }>(`select public.create_test($1, $2, $3, $4, $5, $6) as id`, [
     family,
     learner,
     kind,
     mode,
     parent,
+    book,
   ]).then((r) => r.id);
 
 async function submitAll(family: string, testId: string, correctPredicate: (seq: number) => boolean) {
@@ -403,5 +411,122 @@ describe('submit / retest / override', () => {
       [family]
     );
     expect(f).toEqual({ c: 0, l: 0, u: null });
+  });
+});
+
+describe('word books', () => {
+  beforeEach(setup);
+
+  async function addLearner(family: string, name: string) {
+    return (
+      await one<{ id: string }>(`insert into public.learners (family_id, name) values ($1, $2) returning id`, [
+        family,
+        name,
+      ])
+    ).id;
+  }
+  async function addBook(family: string, learner: string, name: string) {
+    return (
+      await one<{ id: string }>(
+        `insert into public.word_books (family_id, learner_id, name) values ($1, $2, $3) returning id`,
+        [family, learner, name]
+      )
+    ).id;
+  }
+  /** prefix 로 시작하는 단어를 책에 넣는다 */
+  const putInBook = (learner: string, prefix: string, book: string | null) =>
+    db.query(`update public.words set book_id = $3 where learner_id = $1 and term like $2 || '%'`, [
+      learner,
+      prefix,
+      book,
+    ]);
+
+  it('다른 자녀의 책에는 단어를 넣을 수 없고, 같은 자녀 안에서 책 이름은 겹칠 수 없다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    const sister = await addLearner(family, '둘째');
+    const sisterBook = await addBook(family, sister, '능률보카');
+    await addWords(family, learner, 1, 1);
+    await expectError(putInBook(learner, 'w', sisterBook), 'words_book_fk');
+
+    await addBook(family, learner, '능률보카'); // 다른 자녀면 같은 이름 가능
+    await expectError(addBook(family, learner, ' 능률보카 '.toUpperCase()), 'word_books_learner_name_uniq');
+  });
+
+  it('책을 지우면 단어와 시험 기록은 남고 "책 없음"으로 돌아간다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    const book = await addBook(family, learner, '1권');
+    await addWords(family, learner, 3, 1);
+    await putInBook(learner, 'w', book);
+    const t = await createTest(family, learner, 'book', 'spelling', null, book);
+    await submitAll(family, t, () => true);
+
+    await db.query(`delete from public.word_books where id = $1`, [book]);
+    const words = await q<{ book_id: string | null }>(`select book_id from public.words where learner_id = $1`, [learner]);
+    expect(words).toHaveLength(3);
+    expect(words.every((w) => w.book_id === null)).toBe(true);
+    const test = await one<{ book_id: string | null; book_name: string; total: number }>(
+      `select book_id, book_name, total from public.tests where id = $1`,
+      [t]
+    );
+    expect(test).toEqual({ book_id: null, book_name: '1권', total: 3 });
+  });
+
+  it('배포 전 앱의 5개 인자 create_test 호출도 그대로 동작한다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await addWords(family, learner, 50, 1);
+    const r = await one<{ id: string }>(`select public.create_test($1, $2, 'regular', 'spelling', null) as id`, [
+      family,
+      learner,
+    ]);
+    expect(r.id).toBeTruthy();
+  });
+
+  it('자녀당 책은 30권까지', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await db.query(
+      `insert into public.word_books (family_id, learner_id, name) select $1, $2, 'b' || g from generate_series(1, 30) g`,
+      [family, learner]
+    );
+    await expectError(addBook(family, learner, 'b31'), 'BOOK_LIMIT');
+  });
+
+  it('단어책 시험: 그 책 단어만, 오늘 등록한 단어도 포함, 주간 횟수·정기 출제와 무관', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    await db.query(`update public.learners set weekly_limit = 1 where id = $1`, [learner]);
+    const book = await addBook(family, learner, '1권');
+    await addWords(family, learner, 5, 0, 'today'); // 오늘 등록
+    await addWords(family, learner, 50, 1, 'old');
+    await putInBook(learner, 'today', book);
+
+    const bt = await createTest(family, learner, 'book', 'meaning', null, book);
+    const items = await q<{ term: string }>(`select term from public.test_items where test_id = $1`, [bt]);
+    expect(items.map((i) => i.term).sort()).toEqual(['today1', 'today2', 'today3', 'today4', 'today5']);
+    await submitAll(family, bt, (seq) => seq > 2);
+
+    // 단어책 시험의 재시험은 책 정보를 이어받는다
+    const rt = await createTest(family, learner, 'retest', 'meaning', bt);
+    expect(await one(`select kind, total, book_id, book_name from public.tests where id = $1`, [rt])).toEqual({
+      kind: 'retest',
+      total: 2,
+      book_id: book,
+      book_name: '1권',
+    });
+    await submitAll(family, rt, () => true);
+
+    // 주간 1회 한도여도 정기 시험 가능, 정기 시험에는 책과 상관없이 어제까지 등록한 단어 전부
+    const reg = await createTest(family, learner, 'regular', 'spelling');
+    expect((await one<{ total: number }>(`select total from public.tests where id = $1`, [reg])).total).toBe(50);
+  });
+
+  it('빈 책·다른 자녀의 책으로는 단어책 시험을 만들 수 없다', async () => {
+    const { family, learner } = await createFamilyWithLearner();
+    const empty = await addBook(family, learner, '빈 책');
+    await expectError(createTest(family, learner, 'book', 'spelling', null, empty), 'NO_BOOK_WORDS');
+
+    const sister = await addLearner(family, '둘째');
+    const sisterBook = await addBook(family, sister, '언니 책');
+    await addWords(family, sister, 3, 1);
+    await putInBook(sister, 'w', sisterBook);
+    await expectError(createTest(family, learner, 'book', 'spelling', null, sisterBook), 'BOOK_NOT_FOUND');
   });
 });

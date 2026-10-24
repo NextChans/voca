@@ -1,5 +1,5 @@
 import 'server-only';
-import { MAX_LEARNERS_PER_FAMILY, MAX_WORDS_PER_LEARNER } from '@/lib/limits';
+import { MAX_BOOKS_PER_LEARNER, MAX_LEARNERS_PER_FAMILY, MAX_WORDS_PER_LEARNER } from '@/lib/limits';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Direction } from '@/lib/domain/grading';
 import type { TestKind, TestMode, TestStatus } from '@/lib/domain/types';
@@ -38,6 +38,12 @@ export interface Word {
   term: string;
   meaning: string;
   created_at: string;
+  /** 단어책 (없으면 null = 책 없음) */
+  book_id: string | null;
+}
+export interface WordBook {
+  id: string;
+  name: string;
 }
 export interface TestRow {
   id: string;
@@ -51,6 +57,9 @@ export interface TestRow {
   correct: number | null;
   started_at: string;
   submitted_at: string | null;
+  /** 단어책 시험(과 그 재시험)의 책. 책을 지우면 book_id 만 null, book_name 은 출제 시점 스냅샷 */
+  book_id: string | null;
+  book_name: string | null;
 }
 export interface TestItemRow {
   id: string;
@@ -96,12 +105,17 @@ const RPC_ERRORS: Record<string, string> = {
   WORD_LIMIT: `단어는 아이 한 명당 ${MAX_WORDS_PER_LEARNER.toLocaleString()}개까지 저장할 수 있어요.`,
   PIN_LOCKED: '여러 번 틀려서 잠시 잠겼어요. 잠시 후 다시 시도해 주세요.',
   QUOTA_EXCEEDED: '오늘 쓸 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
+  BOOK_LIMIT: `단어책은 아이 한 명당 ${MAX_BOOKS_PER_LEARNER}권까지 만들 수 있어요.`,
+  BOOK_NOT_FOUND: '단어책을 찾을 수 없어요.',
+  NO_BOOK_WORDS: '이 단어책에는 아직 단어가 없어요.',
 };
 
 function fail(error: { message: string; code?: string } | null, context: string): never {
   const key = error?.message?.trim() ?? '';
   if (key in RPC_ERRORS) throw new DomainError(RPC_ERRORS[key]);
   if (error?.code === '23505') throw new DomainError('이미 같은 이름(단어)이 있어요.');
+  // 복합 FK: 다른 자녀의 책이거나 그사이 지워진 책
+  if (error?.code === '23503' && /book_fk/.test(error.message)) throw new DomainError(RPC_ERRORS.BOOK_NOT_FOUND);
   console.error(`[repo] ${context} failed`, error);
   throw new Error(`${context} failed`);
 }
@@ -411,7 +425,7 @@ async function getLearnerAuth(
 export async function listWords(familyId: string, learnerId: string): Promise<Word[]> {
   const { data, error } = await db()
     .from('words')
-    .select('id, term, meaning, created_at')
+    .select('id, term, meaning, created_at, book_id')
     .eq('family_id', familyId)
     .eq('learner_id', learnerId)
     // 등록한 순서대로 (같은 시각에 저장된 과거 데이터만 철자순으로 보조 정렬)
@@ -421,12 +435,13 @@ export async function listWords(familyId: string, learnerId: string): Promise<Wo
   return data ?? [];
 }
 
-/** 이미 있는 철자(대소문자 무시)는 건너뛴다 */
+/** 이미 있는 철자(대소문자 무시)는 건너뛴다. bookId 가 다른 자녀의 책이면 DB 복합 FK 가 거부한다. */
 export async function addWords(
   familyId: string,
   learnerId: string,
   userId: string,
-  rows: { term: string; meaning: string }[]
+  rows: { term: string; meaning: string }[],
+  bookId: string | null = null
 ): Promise<{ added: number; skipped: number }> {
   const existing = new Set(
     (await listWords(familyId, learnerId)).map((w) => w.term.trim().toLowerCase())
@@ -448,6 +463,7 @@ export async function addWords(
           ...r,
           family_id: familyId,
           learner_id: learnerId,
+          book_id: bookId,
           created_by: userId,
           created_at: new Date(base + i).toISOString(),
         }))
@@ -487,6 +503,72 @@ export async function deleteWords(familyId: string, wordIds: readonly string[]):
     deleted += data?.length ?? 0;
   }
   return deleted;
+}
+
+/** 단어를 다른 책으로 옮긴다 (bookId null = 책 없음). 같은 자녀의 단어만. 옮긴 개수를 돌려준다. */
+export async function moveWords(
+  familyId: string,
+  learnerId: string,
+  wordIds: readonly string[],
+  bookId: string | null
+): Promise<number> {
+  let moved = 0;
+  for (let i = 0; i < wordIds.length; i += 100) {
+    const { data, error } = await db()
+      .from('words')
+      .update({ book_id: bookId })
+      .eq('family_id', familyId)
+      .eq('learner_id', learnerId)
+      .in('id', wordIds.slice(i, i + 100))
+      .select('id');
+    if (error) fail(error, 'moveWords');
+    moved += data?.length ?? 0;
+  }
+  return moved;
+}
+
+// ================================================================ 단어책
+
+export async function listBooks(familyId: string, learnerId: string): Promise<WordBook[]> {
+  const { data, error } = await db()
+    .from('word_books')
+    .select('id, name')
+    .eq('family_id', familyId)
+    .eq('learner_id', learnerId)
+    .order('created_at');
+  if (error) fail(error, 'listBooks');
+  return data ?? [];
+}
+
+export async function createBook(familyId: string, learnerId: string, name: string): Promise<string> {
+  const { data, error } = await db()
+    .from('word_books')
+    .insert({ family_id: familyId, learner_id: learnerId, name })
+    .select('id')
+    .single();
+  if (error) fail(error, 'createBook');
+  return data.id;
+}
+
+export async function renameBook(familyId: string, learnerId: string, bookId: string, name: string): Promise<void> {
+  const { error } = await db()
+    .from('word_books')
+    .update({ name })
+    .eq('family_id', familyId)
+    .eq('learner_id', learnerId)
+    .eq('id', bookId);
+  if (error) fail(error, 'renameBook');
+}
+
+/** 책 삭제. 단어·시험 기록은 남고 "책 없음"이 된다 (FK on delete set null). */
+export async function deleteBook(familyId: string, learnerId: string, bookId: string): Promise<void> {
+  const { error } = await db()
+    .from('word_books')
+    .delete()
+    .eq('family_id', familyId)
+    .eq('learner_id', learnerId)
+    .eq('id', bookId);
+  if (error) fail(error, 'deleteBook');
 }
 
 export async function listWordStats(
@@ -536,7 +618,7 @@ export async function listSubmittedItemResults(
 // ================================================================ 시험
 
 const TEST_COLUMNS =
-  'id, learner_id, kind, mode, parent_test_id, status, week_start, total, correct, started_at, submitted_at';
+  'id, learner_id, kind, mode, parent_test_id, status, week_start, total, correct, started_at, submitted_at, book_id, book_name';
 
 export async function countRegularTestsThisWeek(familyId: string, learnerId: string): Promise<number> {
   const { count, error } = await db()
@@ -566,7 +648,7 @@ export async function getInProgressTest(familyId: string, learnerId: string): Pr
 export async function createTest(
   familyId: string,
   learnerId: string,
-  input: { kind: TestKind; mode: TestMode; parentTestId: string | null }
+  input: { kind: TestKind; mode: TestMode; parentTestId: string | null; bookId?: string | null }
 ): Promise<string> {
   const { data, error } = await db().rpc('create_test', {
     p_family_id: familyId,
@@ -574,6 +656,7 @@ export async function createTest(
     p_kind: input.kind,
     p_mode: input.mode,
     p_parent_test_id: input.parentTestId,
+    p_book_id: input.bookId ?? null,
   });
   if (error) fail(error, 'createTest');
   return data as string;

@@ -42,6 +42,8 @@ export interface ActionState {
   message?: string;
   /** 초대코드처럼 한 번만 보여줄 값 */
   secret?: string;
+  /** 새로 만든 항목 id (단어책 등) */
+  id?: string;
 }
 
 /** 사용자에게 보여줄 수 있는 오류만 메시지로, 나머지는 일반 메시지로 변환 */
@@ -348,19 +350,34 @@ const addWordsSchema = z
   .min(1, '저장할 단어가 없어요.')
   .max(300, '한 번에 300개까지 저장할 수 있어요.');
 
+const bookIdSchema = uuid.nullable();
+
+/** 현재 자녀의 책인지 확인 (없으면 DomainError). null 은 '책 없음'. */
+async function findBook(familyId: string, learnerId: string, bookId: string | null) {
+  if (!bookId) return null;
+  const book = (await repo.listBooks(familyId, learnerId)).find((b) => b.id === bookId);
+  if (!book) throw new repo.DomainError('단어책을 찾을 수 없어요.');
+  return book;
+}
+
 /** 단어 추가는 자녀 모드에서도 허용 (수정·삭제는 부모 전용). 등록 당일엔 출제되지 않으므로 시험 공정성에는 영향 없음. */
-export async function addWordsAction(rows: { term: string; meaning: string }[]): Promise<ActionState> {
+export async function addWordsAction(
+  rows: { term: string; meaning: string }[],
+  bookId: string | null = null
+): Promise<ActionState> {
   return run(async () => {
     const { user, member, learner } = await requireLearner();
+    const book = await findBook(member.family_id, learner.id, bookIdSchema.parse(bookId));
     const { added, skipped } = await repo.addWords(
       member.family_id,
       learner.id,
       user.id,
-      addWordsSchema.parse(rows)
+      addWordsSchema.parse(rows),
+      book?.id ?? null
     );
     revalidatePath('/', 'layout');
     return {
-      message: `${learner.name}에게 ${added}개 저장했어요. 내일부터 시험에 나와요.${
+      message: `${book ? `'${book.name}'에 ` : `${learner.name}에게 `}${added}개 저장했어요. 내일부터 시험에 나와요.${
         skipped ? ` (이미 있는 단어 ${skipped}개는 건너뛰었어요)` : ''
       }`,
     };
@@ -392,6 +409,58 @@ export async function deleteWordsAction(wordIds: string[]): Promise<ActionState>
   });
 }
 
+const moveWordsSchema = z.array(uuid).min(1, '옮길 단어를 골라 주세요.').max(500, '한 번에 500개까지 옮길 수 있어요.');
+
+/** 단어를 다른 단어책으로 옮긴다 (null = 책 없음). 부모 모드 전용. */
+export async function moveWordsAction(wordIds: string[], bookId: string | null): Promise<ActionState> {
+  return run(async () => {
+    const { user, member, learner } = await requireLearner();
+    await requireParent(user.id, member.family_id);
+    const ids = [...new Set(moveWordsSchema.parse(wordIds))];
+    const book = await findBook(member.family_id, learner.id, bookIdSchema.parse(bookId));
+    const moved = await repo.moveWords(member.family_id, learner.id, ids, book?.id ?? null);
+    revalidatePath('/', 'layout');
+    return { message: `${moved}개를 ${book ? `'${book.name}'(으)로` : "'책 없음'으로"} 옮겼어요.` };
+  });
+}
+
+// ================================================================ 단어책 (현재 선택된 자녀)
+
+const bookNameSchema = z.string().trim().min(1, '단어책 이름을 입력해 주세요.').max(30, '이름은 30자까지예요.');
+
+/** 단어책 만들기는 자녀 모드에서도 허용 (단어 등록과 같은 수준). 이름 바꾸기·삭제는 부모 전용. */
+export async function createBookAction(name: string): Promise<ActionState> {
+  return run(async () => {
+    const { member, learner } = await requireLearner();
+    const n = bookNameSchema.parse(name);
+    const id = await repo.createBook(member.family_id, learner.id, n);
+    revalidatePath('/', 'layout');
+    return { id, message: `'${n}' 단어책을 만들었어요.` };
+  });
+}
+
+export async function renameBookAction(bookId: string, name: string): Promise<ActionState> {
+  return run(async () => {
+    const { user, member, learner } = await requireLearner();
+    await requireParent(user.id, member.family_id);
+    await repo.renameBook(member.family_id, learner.id, uuid.parse(bookId), bookNameSchema.parse(name));
+    revalidatePath('/', 'layout');
+  });
+}
+
+/** 단어책 삭제. 단어·시험 기록은 남고 '책 없음'이 된다. 부모 모드 전용. */
+export async function deleteBookAction(bookId: string): Promise<ActionState> {
+  return run(async () => {
+    const { user, member, learner } = await requireLearner();
+    await requireParent(user.id, member.family_id);
+    const id = uuid.parse(bookId);
+    await repo.deleteBook(member.family_id, learner.id, id);
+    console.info('[books] delete', { family: member.family_id, learner: learner.id, by: user.id, book: id });
+    revalidatePath('/', 'layout');
+    return { message: '단어책을 지웠어요. 안에 있던 단어는 \'책 없음\'으로 옮겨졌어요.' };
+  });
+}
+
 // ================================================================ 시험
 
 export async function startTestAction(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -400,6 +469,20 @@ export async function startTestAction(_: ActionState, formData: FormData): Promi
     const { member, learner } = await requireLearner();
     const mode = z.enum(['spelling', 'meaning', 'mixed']).parse(formData.get('mode'));
     testId = await repo.createTest(member.family_id, learner.id, { kind: 'regular', mode, parentTestId: null });
+  });
+  if (!testId) return result;
+  revalidatePath('/', 'layout');
+  redirect(`/test/${testId}`);
+}
+
+/** 단어책 시험: 고른 책의 단어로 보는 추가 시험 (주간 횟수에 포함되지 않음) */
+export async function startBookTestAction(_: ActionState, formData: FormData): Promise<ActionState> {
+  let testId = '';
+  const result = await run(async () => {
+    const { member, learner } = await requireLearner();
+    const mode = z.enum(['spelling', 'meaning', 'mixed']).parse(formData.get('mode'));
+    const bookId = z.uuid('단어책을 골라 주세요.').parse(formData.get('book'));
+    testId = await repo.createTest(member.family_id, learner.id, { kind: 'book', mode, parentTestId: null, bookId });
   });
   if (!testId) return result;
   revalidatePath('/', 'layout');

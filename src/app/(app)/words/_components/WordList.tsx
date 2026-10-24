@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { deleteWordsAction } from '@/app/actions';
+import { deleteWordsAction, moveWordsAction } from '@/app/actions';
 import { WordRow } from './WordRow';
 
 export interface WordItem {
@@ -11,6 +11,8 @@ export interface WordItem {
   tested: boolean;
   wrong: number;
   attempts: number;
+  /** 전체 보기에서 붙는 단어책 이름 */
+  book: string | null;
 }
 
 export interface WordGroup {
@@ -39,7 +41,15 @@ function groupBadge(g: WordGroup) {
   return { text: `시험 대기 ${g.words.length - done}개`, tone: 'bg-brand-100 text-brand-700' };
 }
 
-export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMode: boolean }) {
+export function WordList({
+  groups,
+  parentMode,
+  books,
+}: {
+  groups: WordGroup[];
+  parentMode: boolean;
+  books: { id: string; name: string }[];
+}) {
   const [mask, setMask] = useState<Mask>('none');
   // 가리기 모드를 바꾸면 펼쳐 본 단어도 다시 가린다 (key 로 행 상태 초기화)
   const [maskVersion, setMaskVersion] = useState(0);
@@ -49,7 +59,7 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
     setMaskVersion((v) => v + 1);
   };
 
-  // 여러 개 선택해서 지우기 (부모 모드 전용)
+  // 여러 개 선택해서 지우기·단어책 옮기기 (부모 모드 전용)
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -78,6 +88,17 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
       const res = await deleteWordsAction(ids);
       if (res.error) return setNotice({ ok: false, text: res.error });
       setNotice({ ok: true, text: res.message ?? '지웠어요.' });
+      exitSelecting();
+    });
+  };
+
+  const moveSelected = (bookId: string | null) => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    startTransition(async () => {
+      const res = await moveWordsAction(ids, bookId);
+      if (res.error) return setNotice({ ok: false, text: res.error });
+      setNotice({ ok: true, text: res.message ?? '옮겼어요.' });
       exitSelecting();
     });
   };
@@ -123,7 +144,7 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
             }}
             disabled={pending}
           >
-            {selecting ? '선택 끝내기' : '☑️ 여러 개 지우기'}
+            {selecting ? '선택 끝내기' : books.length > 0 ? '☑️ 여러 개 옮기기·지우기' : '☑️ 여러 개 지우기'}
           </button>
         </div>
       )}
@@ -184,13 +205,33 @@ export function WordList({ groups, parentMode }: { groups: WordGroup[]; parentMo
             >
               선택 해제
             </button>
+            {books.length > 0 && (
+              <select
+                aria-label="단어책으로 옮기기"
+                className="max-w-32 rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold disabled:opacity-40"
+                value=""
+                disabled={pending || selected.size === 0}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v) moveSelected(v === 'none' ? null : v);
+                }}
+              >
+                <option value="">📗 옮기기</option>
+                {books.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+                <option value="none">책 없음</option>
+              </select>
+            )}
             <button
               type="button"
               className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold hover:bg-rose-500 disabled:opacity-40"
               onClick={removeSelected}
               disabled={pending || selected.size === 0}
             >
-              {pending ? '지우는 중…' : `🗑️ ${selected.size}개 지우기`}
+              {pending ? '처리 중…' : `🗑️ ${selected.size}개 지우기`}
             </button>
           </div>
         </div>

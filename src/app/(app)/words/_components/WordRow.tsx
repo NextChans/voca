@@ -139,6 +139,7 @@ export function WordRow({
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-1">
+        {word.book && <span className="badge max-w-28 truncate bg-teal-50 text-teal-700">📗 {word.book}</span>}
         {word.tested && <span className="badge bg-emerald-50 text-emerald-700">출제됨</span>}
         {word.wrong > 0 && <span className="badge bg-rose-50 text-rose-600">틀림 {word.wrong}회</span>}
       </div>

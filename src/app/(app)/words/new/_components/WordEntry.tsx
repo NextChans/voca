@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { addWordsAction, type ActionState } from '@/app/actions';
+import { addWordsAction, createBookAction, type ActionState } from '@/app/actions';
 import { FormMessage } from '@/components/FormMessage';
 import { PastePanel } from './PastePanel';
 import { PhotoPanel } from './PhotoPanel';
@@ -19,14 +19,24 @@ const TABS: { value: Tab; label: string }[] = [
 
 export function WordEntry({
   aiOcr,
+  learnerId,
   learnerName,
+  books,
+  requestedBook,
   minTestWords,
 }: {
   aiOcr: boolean;
+  learnerId: string;
   learnerName: string;
+  /** 이 자녀의 단어책 (없으면 책 고르기를 보여주지 않는다) */
+  books: { id: string; name: string }[];
+  /** ?book= 으로 들어온 책 */
+  requestedBook: string | null;
   /** 자녀별 설정의 '시험 최소 단어 수' */
   minTestWords: number;
 }) {
+  const [bookId, setBookId] = useLastBook(learnerId, books, requestedBook);
+  const bookName = books.find((b) => b.id === bookId)?.name ?? null;
   const [tab, setTab] = useState<Tab>('manual');
   const [rows, setRows] = useState<EditRow[]>(() => [newRow()]);
   const [state, setState] = useState<ActionState | undefined>();
@@ -79,7 +89,7 @@ export function WordEntry({
     if (filled.length > MAX_ROWS) return setState({ error: `한 번에 ${MAX_ROWS}개까지 저장할 수 있어요.` });
     const payload = filled.map((r) => ({ term: r.term.trim(), meaning: r.meaning.trim() }));
     startTransition(async () => {
-      const res = await addWordsAction(payload);
+      const res = await addWordsAction(payload, bookId);
       setState(res);
       if (!res.error) {
         setRows([newRow()]);
@@ -120,6 +130,7 @@ export function WordEntry({
       </section>
 
       <section className="card space-y-3">
+        {books.length > 0 && <BookPicker books={books} value={bookId} onChange={setBookId} />}
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-bold">
             등록할 단어 <span className="text-brand-600">{filled.length}개</span>
@@ -140,7 +151,9 @@ export function WordEntry({
           onClick={save}
           disabled={pending || filled.length === 0}
         >
-          {pending ? '저장 중…' : `💾 ${learnerName}에게 ${filled.length}개 저장`}
+          {pending
+            ? '저장 중…'
+            : `💾 ${bookName ? `'${bookName}'에` : `${learnerName}에게`} ${filled.length}개 저장`}
         </button>
         <p className="text-center text-xs text-slate-500">
           오늘 등록한 단어는 내일부터 시험에 나와요 · 시험은 {minTestWords}개 이상부터
@@ -160,3 +173,83 @@ export function WordEntry({
     </div>
   );
 }
+
+const lastBookKey = (learnerId: string) => `voca:lastBook:${learnerId}`;
+
+/**
+ * 저장할 단어책. ?book= 이 있으면 그 책, 없으면 이 기기에서 마지막으로 쓴 책(아직 있으면), 아니면 책 없음.
+ * 기억은 이 기기 편의용일 뿐이라 저장소를 못 써도(사생활 보호 모드 등) 책 없음으로 시작한다.
+ */
+function useLastBook(learnerId: string, books: { id: string }[], requested: string | null) {
+  const [bookId, setBookId] = useState<string | null>(requested);
+  useEffect(() => {
+    if (requested) return;
+    try {
+      const saved = localStorage.getItem(lastBookKey(learnerId));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소는 마운트 후에만 읽을 수 있다
+      if (saved && books.some((b) => b.id === saved)) setBookId(saved);
+    } catch {}
+  }, [learnerId, books, requested]);
+  const choose = (id: string | null) => {
+    setBookId(id);
+    try {
+      if (id) localStorage.setItem(lastBookKey(learnerId), id);
+      else localStorage.removeItem(lastBookKey(learnerId));
+    } catch {}
+  };
+  return [bookId, choose] as const;
+}
+
+const NEW_BOOK = '__new__';
+
+function BookPicker({
+  books,
+  value,
+  onChange,
+}: {
+  books: { id: string; name: string }[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const createBook = () => {
+    const name = window.prompt('새 단어책 이름을 입력해 주세요. (예: 능률보카 초등 1)')?.trim();
+    if (!name) return;
+    startTransition(async () => {
+      const res = await createBookAction(name);
+      if (res.error || !res.id) return setError(res.error ?? '단어책을 만들지 못했어요.');
+      setError(null);
+      onChange(res.id);
+    });
+  };
+
+  return (
+    <div className="space-y-1">
+      <label className="flex items-center gap-2">
+        <span className="shrink-0 font-bold">📗 단어책</span>
+        <select
+          className="input flex-1"
+          value={value ?? ''}
+          disabled={pending}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === NEW_BOOK) createBook();
+            else onChange(v || null);
+          }}
+        >
+          <option value="">책 없음</option>
+          {books.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+          <option value={NEW_BOOK}>＋ 새 단어책 만들기…</option>
+        </select>
+      </label>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
