@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { requireLearner } from '@/lib/server/context';
 import * as repo from '@/lib/server/repo';
-import { MODE_LABEL } from '@/lib/domain/types';
+import { KIND_ICON, MODE_LABEL, testTitle } from '@/lib/domain/types';
 import { TestRunner } from '../_components/TestRunner';
 
 export const metadata = { title: '시험 보는 중' };
@@ -40,7 +40,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     <TestRunner
       testId={id}
       questions={questions}
-      title={`${test.kind === 'retest' ? '🔁 재시험' : '✏️ 정기 시험'} · ${MODE_LABEL[test.mode]}`}
+      title={`${KIND_ICON[test.kind]} ${testTitle(test)} · ${MODE_LABEL[test.mode]}`}
     />
   );
 }

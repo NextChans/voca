@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { requireLearner } from '@/lib/server/context';
 import { isParentMode } from '@/lib/server/parent';
 import * as repo from '@/lib/server/repo';
-import { MODE_LABEL } from '@/lib/domain/types';
+import { KIND_BADGE, KIND_LABEL, MODE_LABEL, testTitle } from '@/lib/domain/types';
 import { formatKst } from '@/lib/domain/week';
 import { RetestButton } from '../../test/_components/RetestButton';
 import { ClearSavedAnswers } from '../_components/ClearSavedAnswers';
@@ -63,12 +63,8 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
       <section className={`card text-center ${cancelled ? 'opacity-60' : ''}`}>
         <div className="flex flex-wrap justify-center gap-1.5">
           <span
-            className={`badge ${
-              test.kind === 'regular' ? 'bg-brand-100 text-brand-700' : 'bg-violet-100 text-violet-700'
-            }`}
-          >
-            {test.kind === 'regular' ? '정기 시험' : '재시험'}
-          </span>
+            className={`badge ${KIND_BADGE[test.kind].tone}`}>{KIND_LABEL[test.kind]}</span>
+          {test.book_name && <span className="badge bg-teal-50 text-teal-700">📗 {test.book_name}</span>}
           <span className="badge bg-slate-100 text-slate-600">{MODE_LABEL[test.mode]}</span>
           {cancelled && <span className="badge bg-slate-200 text-slate-600">취소됨</span>}
         </div>
@@ -93,7 +89,7 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
           <p className="mt-4 text-sm">
             <Link href={`/results/${parentTest.id}`} className="text-brand-600 underline">
               ↩ 원래 시험 보기 ({formatKst(parentTest.submitted_at ?? parentTest.started_at, false)}{' '}
-              {parentTest.kind === 'retest' ? '재시험' : '정기 시험'})
+              {testTitle(parentTest)})
             </Link>
           </p>
         )}

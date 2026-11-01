@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { testTitle } from '@/lib/domain/types';
 import Link from 'next/link';
 import { safeInternalPath } from '@/lib/domain/safePath';
 import { DeleteAccountForm } from '@/components/DeleteAccountForm';
@@ -123,9 +124,10 @@ export default async function SettingsPage({
                       {test && (
                         <div className="mt-4 rounded-xl bg-amber-50 p-3">
                           <p className="text-sm text-amber-900">
-                            ✏️ 진행 중인 {test.kind === 'regular' ? '정기 시험' : '재시험'}이 있어요 (
-                            {test.total}문제). 취소하면 이번 주 횟수에서 빠지고, 단어는 다시 출제 대상이
-                            돼요.
+                            ✏️ 진행 중인 {testTitle(test)}이 있어요 ({test.total}문제).
+                            {test.kind === 'regular'
+                              ? ' 취소하면 이번 주 횟수에서 빠지고, 단어는 다시 출제 대상이 돼요.'
+                              : ' 취소해도 다른 시험에는 영향이 없어요.'}
                           </p>
                           <CancelTestButton testId={test.id} learnerName={l.name} />
                         </div>

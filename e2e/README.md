@@ -6,6 +6,7 @@
 | --- | --- |
 | `full-flow.mjs` | 비로그인 루트 → 소개(`/welcome`) → 로그인 → 필수 동의(미체크 시 차단·기록 확인) → 가족 생성 → 자녀 2명 → PIN → 배우자 초대 합류 → 단어 52개 붙여넣기 → 당일 시험 불가 → (DB로 등록일을 어제로) 시험 응시 → **정답 HTML 비노출** → 채점 → 부모 정정(정정자 기록) → 오답 연습(카드 완주·뜻 쓰기 채점) → 새 단어 연습(오늘 등록 범위 완주) → 단어 여러 개 선택 삭제 → 재시험 → 잠금 상태 권한 → 주 2회 제한 → 자녀 간 데이터 분리 → 재동의 게이트 → 처리방침·약관 비로그인 접근 → 자녀 프로필 삭제 → 회원 탈퇴(다른 부모 있으면 본인만, 마지막 부모면 가족·Auth 전체) |
 | `kid-account.mjs` | 자녀 아이디 생성 → 아이디 로그인 → 프로필 전환 불가 → 부모 모드 UI 없음 → 단어 등록 가능/삭제 불가 → 가짜 카메라 촬영 → 비밀번호 재설정 → 자녀 프로필 삭제 시 자녀 계정 로그인 불가 |
+| `word-books.mjs` | 책 없는 자녀는 화면 그대로 → 단어책 만들기(관리 화면·등록 화면) → 책으로 등록·마지막 책 기억 → 단어장 책별 거르기·여러 개 옮기기·꼬리표 → 연습 책별 거르기 → 단어책 시험(오늘 등록 단어 포함, 빈 책 선택 불가, 주간 횟수 미포함)·재시험 책 이름 유지 → 책 삭제 시 단어·시험 기록 유지 |
 
 ## 실행
 
@@ -16,6 +17,7 @@ npm run build && npm start &            # http://localhost:3000
 npx supabase db reset                   # 스크립트마다 깨끗한 DB에서 시작
 node e2e/full-flow.mjs
 npx supabase db reset && node e2e/kid-account.mjs
+npx supabase db reset && node e2e/word-books.mjs
 ```
 
 - 브라우저: Playwright Chromium. 설치된 Chromium 경로가 따로 있으면 `CHROMIUM_PATH=/path/to/chrome`.

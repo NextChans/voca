@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { requireLearner } from '@/lib/server/context';
 import * as repo from '@/lib/server/repo';
-import { MODE_LABEL } from '@/lib/domain/types';
+import { MODE_LABEL, testTitle } from '@/lib/domain/types';
 import { formatKst, isTestableWord, kstDate, kstWeekStart } from '@/lib/domain/week';
-import { StartTestForm } from '../_components/StartTestForm';
+import { BookTestForm, StartTestForm } from '../_components/StartTestForm';
 import { RetestButton } from '../_components/RetestButton';
 
 export const metadata = { title: '시험 보기' };
@@ -16,17 +16,25 @@ function nextMondayLabel(): string {
   return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 월요일`;
 }
 
-export default async function NewTestPage() {
+export default async function NewTestPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { member, learner } = await requireLearner();
   const fid = member.family_id;
 
-  const [words, testedIds, usedThisWeek, inProgress, tests] = await Promise.all([
+  const [words, testedIds, usedThisWeek, inProgress, tests, books, params] = await Promise.all([
     repo.listWords(fid, learner.id),
     repo.listRegularTestedWordIds(fid, learner.id),
     repo.countRegularTestsThisWeek(fid, learner.id),
     repo.getInProgressTest(fid, learner.id),
     repo.listTests(fid, learner.id, { limit: 100 }),
+    repo.listBooks(fid, learner.id),
+    searchParams,
   ]);
+  const bookCounts = new Map<string, number>();
+  for (const w of words) if (w.book_id) bookCounts.set(w.book_id, (bookCounts.get(w.book_id) ?? 0) + 1);
 
   const now = new Date();
   const today = kstDate(now);
@@ -93,7 +101,7 @@ export default async function NewTestPage() {
           <p className="text-4xl">📝</p>
           <p className="mt-2 text-lg font-bold">풀던 시험이 있어요!</p>
           <p className="mt-1 text-sm text-slate-600">
-            {inProgress.kind === 'retest' ? '재시험' : '정기 시험'} · {MODE_LABEL[inProgress.mode]}{' '}
+            {testTitle(inProgress)} · {MODE_LABEL[inProgress.mode]}{' '}
             · {inProgress.total}문제 · {formatKst(inProgress.started_at)} 시작
           </p>
           <Link href={`/test/${inProgress.id}`} className="btn-primary mt-4 h-14 w-full text-lg">
@@ -155,6 +163,24 @@ export default async function NewTestPage() {
         </section>
       )}
 
+      {books.length > 0 && (
+        <section id="book-test" className="card scroll-mt-20">
+          <h2 className="text-lg font-bold">📗 단어책 시험</h2>
+          <p className="mt-1 mb-4 text-sm text-slate-500">
+            고른 단어책의 단어로 시험을 봐요. 이번 주 횟수에 들어가지 않고, 정기 시험에 나올 단어도 그대로예요.
+          </p>
+          {inProgress ? (
+            <p className="text-sm text-slate-500">풀던 시험을 끝내면 단어책 시험을 볼 수 있어요.</p>
+          ) : (
+            <BookTestForm
+              books={books.map((b) => ({ ...b, count: bookCounts.get(b.id) ?? 0 }))}
+              defaultBook={typeof params.book === 'string' ? params.book : null}
+              maxItems={MAX_ITEMS}
+            />
+          )}
+        </section>
+      )}
+
       {retestable.length > 0 && (
         <section className="card">
           <h2 className="text-lg font-bold">🔁 재시험 가능한 시험</h2>
@@ -168,8 +194,7 @@ export default async function NewTestPage() {
                 <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <Link href={`/results/${t.id}`} className="min-w-0 hover:underline">
                     <span className="block font-semibold">
-                      {formatKst(t.submitted_at ?? t.started_at, false)}{' '}
-                      {t.kind === 'retest' ? '재시험' : '정기 시험'}
+                      {formatKst(t.submitted_at ?? t.started_at, false)} {testTitle(t)}
                     </span>
                     <span className="block text-sm text-slate-500">
                       {MODE_LABEL[t.mode]} · {t.correct}/{t.total} 맞음 · 틀린 단어 {wrong}개

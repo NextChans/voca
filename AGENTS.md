@@ -50,7 +50,7 @@ UI 흐름을 바꿨다면 `e2e/README.md`의 Playwright E2E도 돌리세요.
 supabase/migrations/        스키마·RLS·트랜잭션 함수 (적용 순서 = 파일명 순서)
 src/proxy.ts                세션 쿠키 갱신 + 비로그인 리다이렉트
 src/app/actions.ts          모든 Server Action (zod 검증 → 인가 → repo)
-src/app/(app)/              로그인 후 화면: 홈, words, test, practice, results, settings, profiles
+src/app/(app)/              로그인 후 화면: 홈, words(+books 단어책), test, practice, results, settings, profiles
 src/app/login, onboarding   로그인(이메일 또는 자녀 아이디) / 가족 생성·합류(필수 동의 포함)
 src/app/consent             약관 재동의 (기존 가입자·문서 개정)
 src/app/privacy, terms      개인정보 처리방침·이용약관 (공개, 상수는 src/lib/legal.ts)
