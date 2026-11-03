@@ -97,7 +97,7 @@ curl -s "https://juyduseodcrqfinsnqll.supabase.co/rest/v1/words?select=id&limit=
 | 사진 탭에 "기기 내 글자 인식만 켜져 있어요" 경고 | `GEMINI_API_KEY`/`ANTHROPIC_API_KEY` 미설정 또는 Redeploy 안 함 |
 | 자녀가 시험 시작 불가 | 홈/시험 화면에 이유 표시: 주간 횟수 소진, 출제 대상 < 50, 진행 중 시험 존재(부모가 설정에서 취소 가능) |
 | 부모 PIN 분실 | SQL Editor: `update families set parent_pin_hash = null where id = '<family id>';` → 앱 설정에서 새 PIN 설정 |
-| 발음 버튼 ⚠️ / `/api/tts` 502 | Vercel Logs `[api/tts]` 확인. 403: TTS API 사용 설정·키 제한, 429: Cloud 할당량(분당 60), 400: 음성 이름 |
+| 발음 버튼 ⚠️ / `/api/tts` 502 | Vercel Logs `[api/tts]` 확인. 로그 끝에 Google 사유 코드가 붙는다(#23). 403 `BILLING_DISABLED`: 결제 계정 연결·무료 체험 종료, `SERVICE_DISABLED`: Cloud Text-to-Speech API 사용 중지됨, `API_KEY_SERVICE_BLOCKED`: 키의 API 제한에 TTS 없음, `API_KEY_HTTP_REFERRER_BLOCKED`/`API_KEY_IP_ADDRESS_BLOCKED`: 키에 애플리케이션 제한이 걸림(서버 호출이라 '없음'이어야 함). 429: Cloud 할당량(분당 60), 400: 음성 이름. 단어장·연습은 서버 실패 시 기기 음성으로 대체(#23), 시험 철자 문항은 대체 불가 |
 | 부모 비밀번호 분실 | 로그인 → '비밀번호를 잊었어요' → 메일 링크를 **같은 브라우저**에서 열기 → `/auth/reset` |
 | 탈퇴 후 Auth 사용자가 남음 | Vercel Logs `[repo] deleteParentAccount auth delete failed` / `deleteLearner auth delete failed` 의 userId 를 Authentication → Users 에서 삭제 (데이터는 이미 삭제됨) |
 | 자녀 비밀번호 분실 | 부모 모드 → 설정 → 자녀별 설정 → 비밀번호 바꾸기 |

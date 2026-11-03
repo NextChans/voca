@@ -19,6 +19,22 @@ function error(status: number, message: string) {
   return NextResponse.json({ error: message }, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+/**
+ * Google 오류 응답에서 원인만 뽑는다 (예: "PERMISSION_DENIED API_KEY_SERVICE_BLOCKED").
+ * 메시지 본문은 남기지 않는다 — 요청 정보가 섞일 수 있어 status/reason 코드만.
+ */
+async function googleErrorReason(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as {
+      error?: { status?: string; details?: { reason?: string }[] };
+    };
+    const reasons = (body.error?.details ?? []).map((d) => d.reason).filter(Boolean);
+    return [body.error?.status, ...reasons].filter(Boolean).join(' ');
+  } catch {
+    return '';
+  }
+}
+
 async function synthesizeCloud(text: string, apiKey: string): Promise<ArrayBuffer> {
   const res = await fetch(
     'https://texttospeech.googleapis.com/v1/text:synthesize',
@@ -34,7 +50,7 @@ async function synthesizeCloud(text: string, apiKey: string): Promise<ArrayBuffe
       signal: AbortSignal.timeout(8000),
     }
   );
-  if (!res.ok) throw new Error(`Cloud TTS HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Cloud TTS HTTP ${res.status} ${await googleErrorReason(res)}`);
   const json = (await res.json()) as { audioContent?: string };
   if (!json.audioContent) throw new Error('Cloud TTS returned no audio');
   const buf = Buffer.from(json.audioContent, 'base64');
